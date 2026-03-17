@@ -1,0 +1,64 @@
+{
+  "name": "vault-sync",
+  "displayName": "Vault Sync",
+  "version": "1.0.0",
+  "description": "Shared Obsidian knowledge vault with git sync and note lifecycle management",
+  "author": {
+    "name": "mahuebel"
+  },
+  "keywords": ["obsidian", "vault", "knowledge", "git", "mcp"],
+  "license": "MIT",
+  "skills": [
+    "./skills/setup/SKILL.md",
+    "./skills/promote/SKILL.md",
+    "./skills/cleanup/SKILL.md",
+    "./skills/vault-note/SKILL.md"
+  ],
+  "agents": [
+    "./agents/promoter.md"
+  ],
+  "hooks": {
+    "preToolUse": [
+      {
+        "matcher": "vault-create-note|vault-update-note|vault-promote|vault-discard",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Before executing this vault write, call the vault-pull MCP tool to sync latest changes. If vault-pull returns a conflict error, BLOCK this tool call and report the conflict to the user."
+          }
+        ]
+      }
+    ],
+    "postToolUse": [
+      {
+        "matcher": "vault-create-note|vault-update-note|vault-promote|vault-discard",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "After this vault write completes, call the vault-push MCP tool to commit and push changes. If push fails, warn the user but do not roll back."
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Review what you just wrote. If it involved an architectural decision, a convention discovery, or a notable debugging solution, suggest saving it to the vault. Say: 'This looks like it could be worth saving to the vault: <suggested claim title>. Save it? (y/n)'. Only suggest at most once per user prompt — do not ask multiple times in a single response."
+          }
+        ]
+      }
+    ],
+    "sessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Check if the current project branch is main. If so, call vault-query with status=exploratory to find notes from recently merged branches. If any exist, tell the user: 'Found N exploratory notes from recently merged branches. Run /promote-to-vault to review.'"
+          }
+        ]
+      }
+    ]
+  }
+}

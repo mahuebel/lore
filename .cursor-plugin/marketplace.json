@@ -1,0 +1,10 @@
+{
+  "name": "lore",
+  "owner": "mahuebel",
+  "plugins": [
+    {
+      "name": "vault-sync",
+      "source": "./vault-sync"
+    }
+  ]
+}

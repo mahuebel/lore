@@ -238,15 +238,29 @@ vault-mcp/src/
 
 ## Editor Compatibility
 
-| Feature | Claude Code | Cursor / Others |
-|---------|-------------|-----------------|
-| All 12 MCP tools | Yes | Yes |
-| Slash commands | Yes (via vault-sync plugin) | No |
-| Auto git sync | Yes (via hooks) | Manual (`vault-pull` / `vault-push`) |
-| Session-start reminders | Yes (via hooks) | No |
-| Observation suggestions | Yes (via hooks) | No |
+The vault-sync plugin ships with both `.claude-plugin/` and `.cursor-plugin/` adapters, so hooks and skills work in both editors.
 
-The MCP server is the universal layer. The Claude Code plugin adds convenience automation on top.
+| Feature | Claude Code | Cursor |
+|---------|-------------|--------|
+| All 12 MCP tools | Yes | Yes |
+| Skills (`/vault-note`, `/promote-to-vault`, `/vault-cleanup`) | Yes | Yes |
+| Auto git sync (pre/post tool hooks) | Yes | Yes |
+| Session-start reminders | Yes | Yes |
+| Observation suggestions (post-write hooks) | Yes | Yes |
+| Promoter agent | Yes | Yes |
+
+### Installing in Claude Code
+
+```bash
+claude plugin marketplace add mahuebel/lore
+claude plugin install vault-sync@lore
+```
+
+### Installing in Cursor
+
+In Cursor's Agent chat, use `/add-plugin vault-sync` — or install from the Cursor Marketplace if published. You can also import the GitHub repo directly via Dashboard > Settings > Plugins > Import with the URL `mahuebel/lore`.
+
+Both platforms share the same skills, agents, and hooks — just with platform-specific adapter directories.
 
 ---
 
