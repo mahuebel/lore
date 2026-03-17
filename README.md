@@ -258,7 +258,13 @@ claude plugin install vault-sync@lore
 
 ### Installing in Cursor
 
-In Cursor's Agent chat, use `/add-plugin vault-sync` — or install from the Cursor Marketplace if published. You can also import the GitHub repo directly via Dashboard > Settings > Plugins > Import with the URL `mahuebel/lore`.
+**From the Marketplace** (once published): Search for "vault-sync" in Cursor Settings > Marketplace.
+
+**Before publishing**, use one of these options:
+
+- **Agent chat**: Type `/add-plugin` and point it to the local path where you cloned this repo (e.g., `/path/to/lore/vault-sync`)
+- **Team import** (Teams/Enterprise plans): Go to Dashboard > Settings > Plugins > Import, paste `mahuebel/lore`
+- **Direct GitHub import**: In Cursor Settings > Plugins, import from the GitHub repo URL `mahuebel/lore`
 
 Both platforms share the same skills, agents, and hooks — just with platform-specific adapter directories.
 
