@@ -1,3 +1,9 @@
+---
+name: cleanup
+description: Find and remove exploratory notes for abandoned or deleted branches
+command: vault-cleanup
+---
+
 # /vault-cleanup — Remove Notes from Abandoned Branches
 
 You are helping the developer prune exploratory notes that belong to branches that have been deleted or abandoned. Follow these steps carefully.

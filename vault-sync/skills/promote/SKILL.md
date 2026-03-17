@@ -1,3 +1,9 @@
+---
+name: promote
+description: Review and promote exploratory notes to established status after branch merge
+command: promote-to-vault
+---
+
 # /promote-to-vault — Review and Promote Exploratory Notes
 
 You are guiding the developer through reviewing exploratory notes captured during a feature branch and deciding which to promote to `established` status, edit before promoting, or discard.

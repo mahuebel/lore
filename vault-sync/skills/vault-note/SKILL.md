@@ -1,3 +1,9 @@
+---
+name: vault-note
+description: Create a new note in the vault with proper frontmatter and wikilinks
+command: vault-note
+---
+
 # /vault-note — Create a New Note in the Vault
 
 You are helping the developer capture a discovery, decision, or insight into the shared knowledge vault. Follow these steps.

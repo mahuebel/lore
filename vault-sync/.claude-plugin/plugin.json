@@ -3,64 +3,56 @@
   "version": "1.0.0",
   "description": "Shared Obsidian knowledge vault with git sync and note lifecycle management",
   "skills": [
-    {
-      "name": "setup",
-      "description": "Set up the shared knowledge vault: clone vault repo, configure MCP server, install hooks",
-      "path": "skills/setup.md"
-    },
-    {
-      "name": "promote",
-      "description": "Review and promote exploratory notes to established status after branch merge",
-      "path": "skills/promote.md",
-      "command": "promote-to-vault"
-    },
-    {
-      "name": "cleanup",
-      "description": "Find and remove exploratory notes for abandoned/deleted branches",
-      "path": "skills/cleanup.md",
-      "command": "vault-cleanup"
-    },
-    {
-      "name": "vault-note",
-      "description": "Create a new note in the vault with proper frontmatter and wikilinks",
-      "path": "skills/vault-note.md",
-      "command": "vault-note"
-    }
-  ],
-  "hooks": [
-    {
-      "name": "pre-write-pull",
-      "event": "PreToolUse",
-      "match_tool": "vault-create-note|vault-update-note|vault-promote|vault-discard",
-      "type": "prompt",
-      "prompt": "Before executing this vault write, call the vault-pull MCP tool to sync latest changes. If vault-pull returns a conflict error, BLOCK this tool call and report the conflict to the user."
-    },
-    {
-      "name": "post-write-push",
-      "event": "PostToolUse",
-      "match_tool": "vault-create-note|vault-update-note|vault-promote|vault-discard",
-      "type": "prompt",
-      "prompt": "After this vault write completes, call the vault-push MCP tool to commit and push changes. If push fails, warn the user but do not roll back."
-    },
-    {
-      "name": "session-start-check",
-      "event": "Notification",
-      "type": "prompt",
-      "prompt": "Check if the current project branch is main. If so, call vault-query with status=exploratory to find notes from recently merged branches. If any exist, tell the user: 'Found N exploratory notes from recently merged branches. Run /promote-to-vault to review.'"
-    },
-    {
-      "name": "observation-suggestion",
-      "event": "PostToolUse",
-      "match_tool": "Write|Edit|MultiEdit",
-      "type": "prompt",
-      "prompt": "Review what you just wrote. If it involved an architectural decision, a convention discovery, or a notable debugging solution, suggest saving it to the vault. Say: 'This looks like it could be worth saving to the vault: <suggested claim title>. Save it? (y/n)'. Only suggest at most once per user prompt — do not ask multiple times in a single response."
-    }
+    "./skills/setup/SKILL.md",
+    "./skills/promote/SKILL.md",
+    "./skills/cleanup/SKILL.md",
+    "./skills/vault-note/SKILL.md"
   ],
   "agents": [
-    {
-      "name": "promoter",
-      "description": "Reviews exploratory notes from a merged branch and proposes which to promote, update, or discard",
-      "path": "agents/promoter.md"
-    }
-  ]
+    "./agents/promoter.md"
+  ],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "vault-create-note|vault-update-note|vault-promote|vault-discard",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Before executing this vault write, call the vault-pull MCP tool to sync latest changes. If vault-pull returns a conflict error, BLOCK this tool call and report the conflict to the user."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "vault-create-note|vault-update-note|vault-promote|vault-discard",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "After this vault write completes, call the vault-push MCP tool to commit and push changes. If push fails, warn the user but do not roll back."
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Review what you just wrote. If it involved an architectural decision, a convention discovery, or a notable debugging solution, suggest saving it to the vault. Say: 'This looks like it could be worth saving to the vault: <suggested claim title>. Save it? (y/n)'. Only suggest at most once per user prompt — do not ask multiple times in a single response."
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Check if the current project branch is main. If so, call vault-query with status=exploratory to find notes from recently merged branches. If any exist, tell the user: 'Found N exploratory notes from recently merged branches. Run /promote-to-vault to review.'"
+          }
+        ]
+      }
+    ]
+  }
 }

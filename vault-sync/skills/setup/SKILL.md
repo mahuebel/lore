@@ -1,3 +1,8 @@
+---
+name: setup
+description: Set up the shared knowledge vault - clone repo, configure MCP server, verify connection
+---
+
 # /setup — Set Up the Shared Knowledge Vault
 
 You are guiding the developer through a one-time setup of their shared knowledge vault. Follow these steps in order.
