@@ -1,0 +1,15 @@
+{
+  "name": "lore",
+  "owner": {
+    "name": "mahuebel"
+  },
+  "metadata": {
+    "description": "Shared knowledge vault tools for dev teams"
+  },
+  "plugins": [
+    {
+      "name": "vault-sync",
+      "source": "./vault-sync"
+    }
+  ]
+}
