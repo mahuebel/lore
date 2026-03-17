@@ -113,10 +113,11 @@ vault-init --vault_path ~/obsidian/team-vault --author your-github-username
 ### 5. Install the Claude Code plugin (optional)
 
 ```bash
-claude plugins install vault-sync
+claude plugin marketplace add mahuebel/lore
+claude plugin install vault-sync@lore
 ```
 
-This adds the slash commands (`/vault-note`, `/promote-to-vault`, `/vault-cleanup`) and automatic git sync hooks.
+This adds the slash commands (`/vault-note`, `/promote-to-vault`, `/vault-cleanup`) and automatic hooks for git sync and observation suggestions. Restart Claude Code after installing.
 
 ### 6. Open in Obsidian (optional but recommended)
 
