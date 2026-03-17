@@ -59,26 +59,18 @@ Go to [mahuebel/vault-template](https://github.com/mahuebel/vault-template) and 
 git clone git@github.com:your-org/your-vault.git ~/obsidian/team-vault
 ```
 
-### 2. Set up the MCP server
+### 2. Configure the MCP server
 
-```bash
-cd lore/vault-mcp
-npm install
-npm run build
-```
+No build step required — the server runs via `npx`:
 
-### 3. Configure your editor
-
-**Claude Code** — use the CLI:
+**Claude Code:**
 
 ```bash
 claude mcp add --scope user \
   --env VAULT_PATH=/path/to/your/team-vault \
   --env VAULT_AUTHOR=your-github-username \
-  -- vault-mcp node /path/to/lore/vault-mcp/dist/index.js
+  -- vault-mcp npx lore-vault-mcp
 ```
-
-This registers the MCP server in `~/.claude.json` (user scope — available across all projects). Restart Claude Code after adding.
 
 **Cursor** — add to `.cursor/mcp.json`:
 
@@ -86,8 +78,8 @@ This registers the MCP server in `~/.claude.json` (user scope — available acro
 {
   "mcpServers": {
     "vault-mcp": {
-      "command": "node",
-      "args": ["/path/to/lore/vault-mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["lore-vault-mcp"],
       "env": {
         "VAULT_PATH": "/path/to/your/team-vault",
         "VAULT_AUTHOR": "your-github-username"
@@ -97,24 +89,21 @@ This registers the MCP server in `~/.claude.json` (user scope — available acro
 }
 ```
 
-### 4. Initialize the vault connection
+Restart your editor after adding.
 
-Call the `vault-init` MCP tool (or use `/vault-setup` in Claude Code):
+### 3. Initialize the vault connection
+
+Call the `vault-init` MCP tool (or use `/vault-setup` if you installed the plugin):
 
 ```
 vault-init --vault_path ~/obsidian/team-vault --author your-github-username
 ```
 
-### 5. Install the Claude Code plugin (optional)
+### 4. Install the vault-sync plugin (recommended)
 
-```bash
-claude plugin marketplace add mahuebel/lore
-claude plugin install vault-sync@lore
-```
+This adds skills, hooks, and the promoter agent. See [Editor Compatibility](#editor-compatibility) for install instructions per editor.
 
-This adds the slash commands (`/vault-note`, `/promote-to-vault`, `/vault-cleanup`) and automatic hooks for git sync and observation suggestions. Restart Claude Code after installing.
-
-### 6. Open in Obsidian (optional but recommended)
+### 5. Open in Obsidian (optional)
 
 Open your vault folder as an Obsidian vault for visual browsing, graph view, and manual editing.
 
