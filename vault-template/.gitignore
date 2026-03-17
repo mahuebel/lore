@@ -1,0 +1,14 @@
+# Obsidian workspace (per-user, don't share)
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/appearance.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Smart Connections cache
+.smart-connections/
+
+# Vault MCP config (per-developer)
+.vault-mcp.json
