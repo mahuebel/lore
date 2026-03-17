@@ -56,12 +56,10 @@ Remotion-based animations for project demos and documentation.
 
 ### 1. Create your team vault
 
-Fork or clone `vault-template` into a new repo for your team:
+Go to [mahuebel/vault-template](https://github.com/mahuebel/vault-template) and click **"Use this template"** to create your team's vault repo. Then clone it locally:
 
 ```bash
-# On GitHub: Use "Use this template" button on the vault-template repo
-# Or clone manually:
-git clone <your-vault-template-fork> ~/obsidian/team-vault
+git clone git@github.com:your-org/your-vault.git ~/obsidian/team-vault
 ```
 
 ### 2. Set up the MCP server
