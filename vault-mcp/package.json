@@ -1,14 +1,33 @@
 {
   "name": "lore-vault-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP server for shared Obsidian knowledge vaults with git sync and lifecycle management",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mahuebel/lore.git",
+    "directory": "vault-mcp"
+  },
+  "keywords": [
+    "mcp",
+    "obsidian",
+    "vault",
+    "knowledge",
+    "git",
+    "markdown",
+    "frontmatter",
+    "claude",
+    "cursor",
+    "ai"
+  ],
   "type": "module",
   "main": "dist/index.js",
   "bin": {
     "vault-mcp": "dist/vault-mcp.cjs"
   },
   "files": [
-    "dist/vault-mcp.cjs"
+    "dist/vault-mcp.cjs",
+    "README.md"
   ],
   "scripts": {
     "build": "tsc",
