@@ -14,15 +14,12 @@ Notes follow a git-like lifecycle: `exploratory` on feature branches, promoted t
 
 ```
 lore/
-├── vault-template/    GitHub template repo — fork this to create your vault
 ├── vault-mcp/         TypeScript MCP server — portable vault operations
 ├── vault-sync/        Claude Code plugin — intelligent orchestration layer
 └── vault-animation/   Remotion animations for demos
 ```
 
-### vault-template
-
-A GitHub template repo that teams fork to create their shared vault. Includes folder structure, seed content, frontmatter schema, and conventions.
+The vault template lives in its own repo: [mahuebel/vault-template](https://github.com/mahuebel/vault-template)
 
 ### vault-mcp
 
