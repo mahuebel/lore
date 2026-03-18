@@ -1,7 +1,7 @@
 {
   "name": "vault-sync",
   "displayName": "Vault Sync",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Shared Obsidian knowledge vault with git sync and note lifecycle management",
   "author": {
     "name": "mahuebel"
@@ -18,16 +18,6 @@
     "./agents/promoter.md"
   ],
   "hooks": {
-    "stop": [
-      {
-        "hooks": [
-          {
-            "type": "prompt",
-            "prompt": "You must respond with valid JSON only. Consider the work just completed. If it involved a significant architectural decision, new convention or pattern discovery, or notable debugging breakthrough, respond: {\"ok\": false, \"reason\": \"Vault suggestion: <claim-style title> — save with /vault-note? (y/n)\"}. If the work was routine, respond: {\"ok\": true}. Return ONLY the JSON object, no other text."
-          }
-        ]
-      }
-    ],
     "sessionStart": [
       {
         "matcher": "",
