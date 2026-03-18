@@ -1,6 +1,6 @@
 {
   "name": "vault-sync",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Shared Obsidian knowledge vault with git sync and note lifecycle management",
   "skills": [
     "./skills/setup/SKILL.md",
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Before finishing, briefly consider the work you just completed. If you made a significant architectural decision, discovered a new convention or pattern, or solved a notable debugging problem, suggest saving it to the vault in one line: 'Vault suggestion: <claim-style title> — save with /vault-note? (y/n)'. If the work was routine, say nothing extra."
+            "prompt": "You must respond with valid JSON only. Consider the work just completed. If it involved a significant architectural decision, new convention or pattern discovery, or notable debugging breakthrough, respond: {\"ok\": false, \"reason\": \"Vault suggestion: <claim-style title> — save with /vault-note? (y/n)\"}. If the work was routine, respond: {\"ok\": true}. Return ONLY the JSON object, no other text."
           }
         ]
       }
