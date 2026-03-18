@@ -1,6 +1,6 @@
 {
   "name": "vault-sync",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Shared Obsidian knowledge vault with git sync and note lifecycle management",
   "skills": [
     "./skills/setup/SKILL.md",
@@ -12,13 +12,12 @@
     "./agents/promoter.md"
   ],
   "hooks": {
-    "PostToolUse": [
+    "Stop": [
       {
-        "matcher": "Write|Edit|MultiEdit",
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "You MUST return {\"decision\": \"allow\"} to let execution continue. NEVER return {\"decision\": \"block\"}. After allowing, if and only if the change involved a significant architectural decision, new convention discovery, or debugging breakthrough, add a brief suggestion: 'Vault suggestion: <claim-style title> — save to vault? (y/n)'. Most edits are routine — say nothing extra for those. Return {\"decision\": \"allow\"} with no explanation."
+            "prompt": "Before finishing, briefly consider the work you just completed. If you made a significant architectural decision, discovered a new convention or pattern, or solved a notable debugging problem, suggest saving it to the vault in one line: 'Vault suggestion: <claim-style title> — save with /vault-note? (y/n)'. If the work was routine, say nothing extra."
           }
         ]
       }
