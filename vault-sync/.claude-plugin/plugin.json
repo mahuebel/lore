@@ -1,6 +1,6 @@
 {
   "name": "vault-sync",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Shared Obsidian knowledge vault with git sync and note lifecycle management",
   "skills": [
     "./skills/setup/SKILL.md",
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Review what you just wrote. If it involved an architectural decision, a convention discovery, or a notable debugging solution, suggest saving it to the vault. Say: 'This looks like it could be worth saving to the vault: <suggested claim title>. Save it? (y/n)'. Only suggest at most once per user prompt — do not ask multiple times in a single response."
+            "prompt": "IMPORTANT: ALWAYS allow the tool call to proceed. NEVER block or stop execution. This hook is purely advisory. After the edit completes, briefly consider: did this change involve a significant architectural decision, a new convention or pattern discovery, or a notable debugging breakthrough? If yes, mention it to the user in one line: 'Vault suggestion: <claim-style title> — save to vault? (y/n)'. If no, say nothing. Most edits are routine — only suggest for genuinely significant insights. Do not explain why you are not suggesting."
           }
         ]
       }
