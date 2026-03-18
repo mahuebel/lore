@@ -14,6 +14,40 @@ import { promoteNote } from './tools/vault-promote.js';
 import { discardNote } from './tools/vault-discard.js';
 import { queryNotes } from './vault/query.js';
 import { searchNotes } from './vault/search.js';
+import { gitPull, gitPush } from './git/sync.js';
+
+/**
+ * Wraps a vault write operation with git pull (before) and commit+push (after).
+ * The write function receives vaultPath and author, does its work, and returns
+ * { text: string, commitMessage?: string }. If commitMessage is provided,
+ * it's used instead of the generic "vault: auto-sync from <author>".
+ */
+async function withGitSync(
+  writeFn: (vaultPath: string, author: string) => { text: string; commitMessage?: string }
+): Promise<{ result: string; syncWarning?: string }> {
+  const config = getConfig();
+
+  // Pull before write
+  const pullResult = await gitPull(config.vault_path);
+  if (!pullResult.success) {
+    throw new Error(pullResult.error ?? 'Failed to pull latest vault changes.');
+  }
+
+  // Execute the write
+  const writeResult = writeFn(config.vault_path, config.author);
+
+  // Commit and push after write
+  const pushResult = await gitPush(
+    config.vault_path,
+    config.author,
+    writeResult.commitMessage
+  );
+
+  return {
+    result: writeResult.text,
+    syncWarning: pushResult.warning,
+  };
+}
 
 const server = new McpServer({
   name: 'vault-mcp',
@@ -79,9 +113,12 @@ server.tool(
   },
   async (params) => {
     try {
-      const config = getConfig();
-      const result = createNote(config.vault_path, config.author, params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      const { result, syncWarning } = await withGitSync((vaultPath, author) => {
+        const noteResult = createNote(vaultPath, author, params);
+        return { text: JSON.stringify(noteResult, null, 2) };
+      });
+      const text = syncWarning ? `${result}\n\nSync warning: ${syncWarning}` : result;
+      return { content: [{ type: 'text', text }] };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return { content: [{ type: 'text', text: message }], isError: true };
@@ -118,9 +155,12 @@ server.tool(
   },
   async (params) => {
     try {
-      const config = getConfig();
-      updateNote(config.vault_path, params as any);
-      return { content: [{ type: 'text', text: 'Note updated successfully.' }] };
+      const { result, syncWarning } = await withGitSync((vaultPath) => {
+        updateNote(vaultPath, params as any);
+        return { text: 'Note updated successfully.' };
+      });
+      const text = syncWarning ? `${result}\n\nSync warning: ${syncWarning}` : result;
+      return { content: [{ type: 'text', text }] };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return { content: [{ type: 'text', text: message }], isError: true };
@@ -136,9 +176,11 @@ server.tool(
   },
   async (params) => {
     try {
-      const config = getConfig();
-      const result = deleteNote(config.vault_path, params);
-      return { content: [{ type: 'text', text: result }] };
+      const { result, syncWarning } = await withGitSync((vaultPath) => {
+        return { text: deleteNote(vaultPath, params) };
+      });
+      const text = syncWarning ? `${result}\n\nSync warning: ${syncWarning}` : result;
+      return { content: [{ type: 'text', text }] };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return { content: [{ type: 'text', text: message }], isError: true };
@@ -155,9 +197,12 @@ server.tool(
   },
   async (params) => {
     try {
-      const config = getConfig();
-      promoteNote(config.vault_path, params);
-      return { content: [{ type: 'text', text: 'Note promoted to established.' }] };
+      const { result, syncWarning } = await withGitSync((vaultPath) => {
+        promoteNote(vaultPath, params);
+        return { text: 'Note promoted to established.' };
+      });
+      const text = syncWarning ? `${result}\n\nSync warning: ${syncWarning}` : result;
+      return { content: [{ type: 'text', text }] };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return { content: [{ type: 'text', text: message }], isError: true };
@@ -174,9 +219,12 @@ server.tool(
   },
   async (params) => {
     try {
-      const config = getConfig();
-      const result = discardNote(config.vault_path, config.author, params);
-      return { content: [{ type: 'text', text: result.commitMessage }] };
+      const { result, syncWarning } = await withGitSync((vaultPath, author) => {
+        const discardResult = discardNote(vaultPath, author, params);
+        return { text: discardResult.commitMessage, commitMessage: discardResult.commitMessage };
+      });
+      const text = syncWarning ? `${result}\n\nSync warning: ${syncWarning}` : result;
+      return { content: [{ type: 'text', text }] };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return { content: [{ type: 'text', text: message }], isError: true };

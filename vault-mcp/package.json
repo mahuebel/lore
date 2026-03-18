@@ -1,6 +1,6 @@
 {
   "name": "lore-vault-mcp",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "MCP server for shared Obsidian knowledge vaults with git sync and lifecycle management",
   "license": "MIT",
   "repository": {

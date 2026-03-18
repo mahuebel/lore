@@ -1,6 +1,6 @@
 {
   "name": "vault-sync",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Shared Obsidian knowledge vault with git sync and note lifecycle management",
   "skills": [
     "./skills/setup/SKILL.md",
@@ -12,27 +12,7 @@
     "./agents/promoter.md"
   ],
   "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "vault-create-note|vault-update-note|vault-promote|vault-discard",
-        "hooks": [
-          {
-            "type": "prompt",
-            "prompt": "Before executing this vault write, call the vault-pull MCP tool to sync latest changes. If vault-pull returns a conflict error, BLOCK this tool call and report the conflict to the user."
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
-      {
-        "matcher": "vault-create-note|vault-update-note|vault-promote|vault-discard",
-        "hooks": [
-          {
-            "type": "prompt",
-            "prompt": "After this vault write completes, call the vault-push MCP tool to commit and push changes. If push fails, warn the user but do not roll back."
-          }
-        ]
-      },
       {
         "matcher": "Write|Edit|MultiEdit",
         "hooks": [
