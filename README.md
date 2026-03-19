@@ -37,11 +37,13 @@ A TypeScript MCP server that provides 12 tools for vault operations. Works with 
 
 ### vault-sync
 
-A Claude Code plugin that adds intelligent orchestration on top of vault-mcp:
+A Claude Code and Cursor plugin that adds intelligent orchestration on top of vault-mcp:
 
 - **Skills:** `/vault-note`, `/promote-to-vault`, `/vault-cleanup`, and a setup wizard
-- **Hooks:** Auto-pull before writes, auto-push after writes, session-start promotion reminders, observation suggestions
+- **Observation daemon:** Background service that silently captures tool use data and evaluates it for vault-worthiness using a separate AI session
+- **Vault context injection:** Automatically searches the vault for relevant established notes and injects them into your session when you ask a question
 - **Agent:** Promoter agent that reviews exploratory notes and recommends promote/edit/discard
+- **claude-mem integration:** When claude-mem is installed, uses its pre-processed observations for richer evaluation (supercharged mode)
 
 ### vault-animation
 
@@ -141,9 +143,15 @@ Periodically prune notes from abandoned branches:
 
 Groups orphaned notes (branch deleted), stale notes (30+ days inactive), and active notes. Bulk discard what's no longer relevant.
 
-### AI-suggested capture
+### Automatic context injection
 
-With the vault-sync plugin, Claude Code automatically suggests saving vault-worthy observations after writing code. You confirm or dismiss — no noise, no missed insights.
+When you ask a question or describe a task, vault-sync searches the vault for relevant established notes and injects them into the session. You don't need to search manually — the vault feeds you relevant team knowledge automatically.
+
+### Observation capture
+
+The vault-sync daemon silently captures tool use observations during your session. At the end of each turn, it evaluates whether anything vault-worthy happened. If so, suggestions appear at the start of your next session — no interruptions during work.
+
+If [claude-mem](https://github.com/thedotmack/claude-mem) is installed, vault-sync uses its pre-processed observations instead of capturing its own (supercharged mode). This avoids duplication and provides richer evaluation data.
 
 ---
 
@@ -233,9 +241,11 @@ The vault-sync plugin ships with both `.claude-plugin/` and `.cursor-plugin/` ad
 |---------|-------------|--------|
 | All 12 MCP tools | Yes | Yes |
 | Skills (`/vault-note`, `/promote-to-vault`, `/vault-cleanup`) | Yes | Yes |
-| Auto git sync (pre/post tool hooks) | Yes | Yes |
-| Session-start reminders | Yes | Yes |
-| Observation suggestions (post-write hooks) | Yes | Yes |
+| Auto git sync (built into MCP tools) | Yes | Yes |
+| Vault context injection (UserPromptSubmit hook) | Yes | Yes |
+| Observation capture (PostToolUse hook + daemon) | Yes | Yes |
+| Vault suggestions at session start | Yes | Yes |
+| claude-mem supercharged mode | Yes | Yes |
 | Promoter agent | Yes | Yes |
 
 ### Installing in Claude Code
