@@ -50,6 +50,15 @@ if (args.length === 0) {
 
 args[0] = fixBrokenScriptPath(args[0]);
 
+if (!existsSync(args[0])) {
+  process.stderr.write(`[vault-sync] script not found: ${args[0]}\n`);
+  process.stderr.write(`[vault-sync] CLAUDE_PLUGIN_ROOT=${process.env.CLAUDE_PLUGIN_ROOT || '(not set)'}\n`);
+  process.stderr.write(`[vault-sync] resolved root=${RESOLVED_PLUGIN_ROOT}\n`);
+  // Output empty JSON so hook doesn't block
+  console.log('{}');
+  process.exit(0);
+}
+
 function collectStdin() {
   return new Promise((resolve) => {
     if (process.stdin.isTTY) { resolve(null); return; }
@@ -78,4 +87,7 @@ if (stdinData) {
 }
 
 child.on('close', (code) => process.exit(code ?? 0));
-child.on('error', () => process.exit(0));
+child.on('error', (err) => {
+  process.stderr.write(`[vault-sync] hook execution error: ${err.message}\n`);
+  process.exit(0);
+});

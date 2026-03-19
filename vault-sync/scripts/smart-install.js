@@ -16,7 +16,7 @@ const nodeModules = join(pluginRoot, 'node_modules');
 try {
   if (!existsSync(nodeModules)) {
     process.stderr.write('[vault-sync] Installing dependencies...\n');
-    execFileSync('npm', ['install', '--production', '--no-audit', '--no-fund'], {
+    execFileSync('npm', ['install', '--no-audit', '--no-fund'], {
       cwd: pluginRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 120000,
