@@ -1,7 +1,7 @@
 {
   "name": "vault-sync",
-  "version": "1.6.0",
-  "description": "Shared Obsidian knowledge vault with git sync and note lifecycle management",
+  "version": "2.0.0",
+  "description": "Shared Obsidian knowledge vault with git sync, observation capture, and automatic context injection",
   "skills": [
     "./skills/setup/SKILL.md",
     "./skills/promote/SKILL.md",
@@ -11,17 +11,5 @@
   "agents": [
     "./agents/promoter.md"
   ],
-  "hooks": {
-    "Notification": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "prompt",
-            "prompt": "Check if the current project branch is main. If so, call vault-query with status=exploratory to find notes from recently merged branches. If any exist, tell the user: 'Found N exploratory notes from recently merged branches. Run /promote-to-vault to review.'"
-          }
-        ]
-      }
-    ]
-  }
+  "hooks": "./hooks/hooks.json"
 }

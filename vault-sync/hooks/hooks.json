@@ -1,0 +1,74 @@
+{
+  "description": "vault-sync observation daemon hooks",
+  "hooks": {
+    "Setup": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && _R=\"$HOME/.claude/plugins/cache/lore/vault-sync\"; node \"$_R/scripts/smart-install.js\"",
+            "timeout": 300
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && _R=\"$HOME/.claude/plugins/cache/lore/vault-sync\"; node \"$_R/scripts/bun-runner.js\" \"$_R/dist/hooks/session-start.cjs\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && _R=\"$HOME/.claude/plugins/cache/lore/vault-sync\"; node \"$_R/scripts/bun-runner.js\" \"$_R/dist/hooks/user-prompt-submit.cjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && _R=\"$HOME/.claude/plugins/cache/lore/vault-sync\"; node \"$_R/scripts/bun-runner.js\" \"$_R/dist/hooks/post-tool-use.cjs\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && _R=\"$HOME/.claude/plugins/cache/lore/vault-sync\"; node \"$_R/scripts/bun-runner.js\" \"$_R/dist/hooks/stop.cjs\"",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && _R=\"$HOME/.claude/plugins/cache/lore/vault-sync\"; node \"$_R/scripts/bun-runner.js\" \"$_R/dist/hooks/session-end.cjs\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
