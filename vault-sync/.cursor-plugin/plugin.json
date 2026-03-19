@@ -1,7 +1,7 @@
 {
   "name": "vault-sync",
   "displayName": "Vault Sync",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Shared Obsidian knowledge vault with git sync, observation capture, and automatic context injection",
   "author": {
     "name": "mahuebel"
