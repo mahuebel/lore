@@ -12,6 +12,7 @@ import {
   PID_FILE,
   SUGGESTIONS_FILE,
 } from './types.js';
+import { evaluateObservations } from './evaluator.js';
 
 // ---------------------------------------------------------------------------
 // In-memory state
@@ -57,14 +58,35 @@ app.post('/evaluate', async (c) => {
       return c.json({ evaluated: 0, suggestions: 0 });
     }
 
-    // TODO: Agent SDK evaluation goes here
-    console.error(`[vault-sync] evaluate: would process ${count} observations`);
+    console.error(`[vault-sync] evaluating ${count} observations...`);
 
-    // Clear the queue
-    state.observations.length = 0;
+    // Drain the queue
+    const batch = state.observations.splice(0);
 
-    return c.json({ evaluated: count, suggestions: 0 });
+    const suggestions = await evaluateObservations(batch);
+
+    if (suggestions.length > 0) {
+      // Merge with existing suggestions file
+      let existing: VaultSuggestion[] = [];
+      try {
+        if (existsSync(SUGGESTIONS_FILE)) {
+          existing = JSON.parse(readFileSync(SUGGESTIONS_FILE, 'utf-8'));
+        }
+      } catch {
+        // corrupted file, start fresh
+      }
+
+      const merged = [...existing, ...suggestions];
+      mkdirSync(LORE_DIR, { recursive: true });
+      writeFileSync(SUGGESTIONS_FILE, JSON.stringify(merged, null, 2));
+      console.error(`[vault-sync] ${suggestions.length} new suggestions saved (${merged.length} total)`);
+    } else {
+      console.error(`[vault-sync] no vault-worthy observations found`);
+    }
+
+    return c.json({ evaluated: count, suggestions: suggestions.length });
   } catch (err) {
+    console.error(`[vault-sync] evaluation error: ${err}`);
     return c.json({ error: 'Evaluation failed' }, 500);
   }
 });

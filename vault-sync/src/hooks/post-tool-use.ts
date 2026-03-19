@@ -17,7 +17,7 @@ async function main() {
     const { tool_name, tool_input, tool_response, cwd } = input;
 
     if (!tool_name || SKIP_TOOLS.has(tool_name)) {
-      output({});
+      return output({});
     }
 
     await daemonRequest('POST', '/observations', {

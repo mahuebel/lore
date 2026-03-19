@@ -6,7 +6,7 @@ async function main() {
 
     // Prevent infinite loops if this hook is re-entered
     if (input.stop_hook_active) {
-      output({ ok: true });
+      return output({ ok: true });
     }
 
     await daemonRequest('POST', '/evaluate', undefined, 30000);

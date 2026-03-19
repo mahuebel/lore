@@ -1,6 +1,6 @@
 {
   "name": "vault-sync",
-  "version": "2.0.2",
+  "version": "2.1.0",
   "description": "Shared Obsidian knowledge vault with git sync, observation capture, and automatic context injection",
   "skills": [
     "./skills/setup/SKILL.md",
