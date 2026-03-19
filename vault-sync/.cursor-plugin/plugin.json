@@ -1,7 +1,7 @@
 {
   "name": "vault-sync",
   "displayName": "Vault Sync",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Shared Obsidian knowledge vault with git sync, observation capture, and automatic context injection",
   "author": {
     "name": "mahuebel"
@@ -16,6 +16,5 @@
   ],
   "agents": [
     "./agents/promoter.md"
-  ],
-  "hooks": "./hooks/hooks.json"
+  ]
 }
