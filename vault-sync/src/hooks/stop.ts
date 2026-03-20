@@ -1,4 +1,5 @@
 import { readStdin, daemonRequest, output } from './utils.js';
+import { evaluateObservations } from '../evaluator.js';
 
 async function main() {
   try {
@@ -9,10 +10,29 @@ async function main() {
       return output({ ok: true });
     }
 
-    await daemonRequest('POST', '/evaluate', undefined, 30000);
+    // Drain observations from daemon
+    const observations = await daemonRequest('POST', '/observations/drain');
+
+    if (!observations || !Array.isArray(observations) || observations.length === 0) {
+      return output({ ok: true });
+    }
+
+    process.stderr.write(`[vault-sync] evaluating ${observations.length} observations...\n`);
+
+    // Run evaluation here (inside Claude Code context where SDK is available)
+    const suggestions = await evaluateObservations(observations);
+
+    if (suggestions.length > 0) {
+      // Post suggestions back to daemon for storage
+      await daemonRequest('POST', '/suggestions', suggestions);
+      process.stderr.write(`[vault-sync] ${suggestions.length} vault suggestions saved\n`);
+    } else {
+      process.stderr.write(`[vault-sync] no vault-worthy observations found\n`);
+    }
 
     output({ ok: true });
-  } catch {
+  } catch (err) {
+    process.stderr.write(`[vault-sync] stop hook error: ${err}\n`);
     output({ ok: true });
   }
 }

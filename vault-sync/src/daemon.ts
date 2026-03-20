@@ -50,6 +50,31 @@ app.post('/observations', async (c) => {
   }
 });
 
+app.post('/observations/drain', (c) => {
+  const batch = state.observations.splice(0);
+  return c.json(batch);
+});
+
+app.post('/suggestions', async (c) => {
+  try {
+    const incoming: VaultSuggestion[] = await c.req.json();
+    let existing: VaultSuggestion[] = [];
+    try {
+      if (existsSync(SUGGESTIONS_FILE)) {
+        existing = JSON.parse(readFileSync(SUGGESTIONS_FILE, 'utf-8'));
+      }
+    } catch {
+      // corrupted, start fresh
+    }
+    const merged = [...existing, ...incoming];
+    mkdirSync(LORE_DIR, { recursive: true });
+    writeFileSync(SUGGESTIONS_FILE, JSON.stringify(merged, null, 2));
+    return c.json({ saved: incoming.length, total: merged.length });
+  } catch {
+    return c.json({ error: 'Invalid suggestions payload' }, 400);
+  }
+});
+
 app.post('/evaluate', async (c) => {
   try {
     const count = state.observations.length;
