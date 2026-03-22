@@ -31,13 +31,39 @@ const state: DaemonState = {
   startedAt: Date.now(),
 };
 
+interface EvalStatus {
+  state: 'idle' | 'evaluating' | 'error';
+  observationCount: number;
+  startedAt: number | null;
+  completedAt: number | null;
+  lastError: string | null;
+  lastSuggestionCount: number | null;
+}
+
+const evalStatus: EvalStatus = {
+  state: 'idle',
+  observationCount: 0,
+  startedAt: null,
+  completedAt: null,
+  lastError: null,
+  lastSuggestionCount: null,
+};
+
 // ---------------------------------------------------------------------------
 // Background evaluation
 // ---------------------------------------------------------------------------
 
 function evaluateInBackground(observations: QueuedObservation[]) {
+  evalStatus.state = 'evaluating';
+  evalStatus.observationCount = observations.length;
+  evalStatus.startedAt = Date.now();
+  evalStatus.lastError = null;
+
   evaluateObservations(observations)
     .then((suggestions) => {
+      evalStatus.state = 'idle';
+      evalStatus.completedAt = Date.now();
+      evalStatus.lastSuggestionCount = suggestions.length;
       // Write session history
       const record: SessionRecord = {
         startedAt: state.startedAt,
@@ -66,6 +92,10 @@ function evaluateInBackground(observations: QueuedObservation[]) {
       }
     })
     .catch((err) => {
+      evalStatus.state = 'error';
+      evalStatus.completedAt = Date.now();
+      evalStatus.lastError = String(err);
+      evalStatus.lastSuggestionCount = 0;
       console.error(`[vault-sync] background evaluation error: ${err}`);
       // Still write session history on failure
       const record: SessionRecord = {
@@ -122,6 +152,7 @@ app.get('/health', (c) => {
     startedAt: state.startedAt,
     queueDepth: state.observations.length,
     pid: process.pid,
+    evaluator: evalStatus,
   });
 });
 

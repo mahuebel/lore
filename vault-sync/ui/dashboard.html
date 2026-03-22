@@ -403,6 +403,11 @@
         </div>
         <div class="pipeline-arrow">&rarr;</div>
         <div class="pipeline-stage">
+          <div class="pipeline-stage-value" id="pipeline-evaluator" style="font-size: 14px">idle</div>
+          <div class="pipeline-stage-label">Evaluator</div>
+        </div>
+        <div class="pipeline-arrow">&rarr;</div>
+        <div class="pipeline-stage">
           <div class="pipeline-stage-value" id="pipeline-suggestions">0</div>
           <div class="pipeline-stage-label">Suggestions</div>
         </div>
@@ -412,8 +417,9 @@
           <div class="pipeline-stage-label">In Vault</div>
         </div>
       </div>
+      <div id="eval-detail" style="margin-top: 10px; font-size: 12px; color: #8b949e;"></div>
       <div class="pipeline-subtext">
-        PostToolUse captures &rarr; Stop hook evaluates &rarr; SessionStart presents &rarr; User promotes to vault
+        PostToolUse captures &rarr; Stop evaluates in background &rarr; SessionStart presents &rarr; User promotes to vault
       </div>
     </div>
   </div>
@@ -567,6 +573,30 @@
       setText('health-port', '37778');
       setText('health-pid', String(data.pid || '--'));
       setText('pipeline-queued', String(data.queueDepth || 0));
+
+      // Evaluator status
+      var ev = data.evaluator || {};
+      var evEl = $('pipeline-evaluator');
+      var evDetail = $('eval-detail');
+      if (ev.state === 'evaluating') {
+        evEl.textContent = 'running';
+        evEl.style.color = '#d29922';
+        var elapsed = Math.round((Date.now() - ev.startedAt) / 1000);
+        evDetail.textContent = 'Evaluating ' + ev.observationCount + ' observations (' + elapsed + 's)';
+      } else if (ev.state === 'error') {
+        evEl.textContent = 'error';
+        evEl.style.color = '#f85149';
+        evDetail.textContent = 'Last error: ' + (ev.lastError || 'unknown').slice(0, 100);
+      } else {
+        evEl.textContent = 'idle';
+        evEl.style.color = '#3fb950';
+        if (ev.completedAt) {
+          var ago = formatUptime(Date.now() - ev.completedAt);
+          evDetail.textContent = 'Last run: ' + ago + ' ago \u2014 ' + (ev.lastSuggestionCount || 0) + ' suggestions generated';
+        } else {
+          evDetail.textContent = 'No evaluations yet this session';
+        }
+      }
     }).catch(function() {
       $('error-overlay').style.display = 'flex';
     });
