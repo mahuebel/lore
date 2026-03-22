@@ -54,21 +54,23 @@ async function main() {
 
     // Fetch suggestions
     const suggestionsResp = await daemonRequest('GET', '/suggestions');
+    const suggestions = suggestionsResp?.suggestions || (Array.isArray(suggestionsResp) ? suggestionsResp : []);
 
-    if (suggestionsResp && Array.isArray(suggestionsResp) && suggestionsResp.length > 0) {
-      const formatted = formatSuggestions(suggestionsResp);
+    const contextLines: string[] = ['Lore dashboard: http://localhost:37778'];
+
+    if (suggestions.length > 0) {
+      contextLines.push('');
+      contextLines.push(formatSuggestions(suggestions));
 
       // Dismiss shown suggestions
       await daemonRequest('POST', '/suggestions/dismiss');
-
-      output({
-        hookSpecificOutput: {
-          additionalContext: formatted,
-        },
-      });
     }
 
-    output({});
+    output({
+      hookSpecificOutput: {
+        additionalContext: contextLines.join('\n'),
+      },
+    });
   } catch (err) {
     writeHookStatus('SessionStart', { lastFiredAt: Date.now(), success: false, error: String(err) });
     output({});
