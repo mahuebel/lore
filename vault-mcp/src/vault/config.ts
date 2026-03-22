@@ -1,6 +1,7 @@
 // src/vault/config.ts
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { resolveVaultForProject } from './resolver.js';
 
 export interface VaultConfig {
   vault_path: string;
@@ -25,12 +26,17 @@ export function loadConfig(vaultPath: string): VaultConfig {
   return JSON.parse(readFileSync(configPath, 'utf-8'));
 }
 
-export function getConfig(): VaultConfig {
-  const vaultPath = process.env.VAULT_PATH;
-  if (!vaultPath) {
-    throw new Error(
-      'VAULT_PATH environment variable not set. Configure vault-mcp with VAULT_PATH and VAULT_AUTHOR.'
-    );
-  }
-  return loadConfig(vaultPath);
+export function getVaultPath(cwd?: string): string {
+  // 1. Explicit VAULT_PATH env var always wins
+  if (process.env.VAULT_PATH) return process.env.VAULT_PATH;
+  // 2. Resolve from cwd (or process.cwd() as fallback)
+  const resolved = resolveVaultForProject(cwd || process.cwd());
+  if (resolved) return resolved;
+  throw new Error(
+    'Vault not configured. Set VAULT_PATH or create .lore/config.json in your project.'
+  );
+}
+
+export function getConfig(cwd?: string): VaultConfig {
+  return loadConfig(getVaultPath(cwd));
 }
