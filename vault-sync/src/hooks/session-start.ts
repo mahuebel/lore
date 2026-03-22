@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { readStdin, daemonRequest, output } from './utils.js';
+import { writeHookStatus } from '../hook-heartbeat.js';
 
 const RESOLVED_PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
 
@@ -31,6 +32,7 @@ function formatSuggestions(suggestions: Suggestion[]): string {
 
 async function main() {
   try {
+    writeHookStatus('SessionStart', { lastFiredAt: Date.now(), success: true });
     await readStdin();
 
     // Check daemon health
@@ -67,7 +69,8 @@ async function main() {
     }
 
     output({});
-  } catch {
+  } catch (err) {
+    writeHookStatus('SessionStart', { lastFiredAt: Date.now(), success: false, error: String(err) });
     output({});
   }
 }

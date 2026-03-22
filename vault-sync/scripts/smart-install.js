@@ -7,13 +7,29 @@
  * Uses __dirname for path resolution so it works regardless of
  * whether CLAUDE_PLUGIN_ROOT is set (it's unreliable in some hook contexts).
  */
-import { existsSync, statSync, readdirSync } from 'fs';
+import { existsSync, statSync, readdirSync, readFileSync, writeFileSync, mkdirSync, renameSync } from 'fs';
 import { execFileSync } from 'child_process';
 import { dirname, resolve, join } from 'path';
 import { fileURLToPath } from 'url';
+import { homedir } from 'os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pluginRoot = resolve(__dirname, '..');
+
+const LORE_DIR = join(homedir(), '.lore');
+const HOOK_STATUS_FILE = join(LORE_DIR, 'hook-status.json');
+
+function writeSetupHeartbeat(success, error) {
+  try {
+    mkdirSync(LORE_DIR, { recursive: true });
+    let existing = {};
+    try { existing = JSON.parse(readFileSync(HOOK_STATUS_FILE, 'utf-8')); } catch {}
+    existing['Setup'] = { lastFiredAt: Date.now(), success, error };
+    const tmp = HOOK_STATUS_FILE + '.tmp';
+    writeFileSync(tmp, JSON.stringify(existing, null, 2));
+    renameSync(tmp, HOOK_STATUS_FILE);
+  } catch {}
+}
 
 function needsRebuild() {
   const distDir = join(pluginRoot, 'dist');
@@ -59,8 +75,10 @@ try {
     });
     process.stderr.write('[vault-sync] Build complete.\n');
   }
+  writeSetupHeartbeat(true);
 } catch (err) {
   process.stderr.write(`[vault-sync] Install/build error: ${err.message}\n`);
+  writeSetupHeartbeat(false, err.message);
 }
 
 // Always succeed — never block session start

@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { readStdin, output } from './utils.js';
+import { writeHookStatus } from '../hook-heartbeat.js';
 
 const STOP_WORDS = new Set([
   'the', 'is', 'a', 'an', 'to', 'in', 'for', 'of', 'and', 'or', 'but',
@@ -101,6 +102,7 @@ async function main() {
   const deadline = Date.now() + 2000;
 
   try {
+    writeHookStatus('UserPromptSubmit', { lastFiredAt: Date.now(), success: true });
     const input = await readStdin();
     const promptText = input.input || input.prompt || '';
 
@@ -160,7 +162,8 @@ async function main() {
     }
 
     output({});
-  } catch {
+  } catch (err) {
+    writeHookStatus('UserPromptSubmit', { lastFiredAt: Date.now(), success: false, error: String(err) });
     output({});
   }
 }

@@ -1,4 +1,5 @@
 import { readStdin, daemonRequest, output } from './utils.js';
+import { writeHookStatus } from '../hook-heartbeat.js';
 
 const SKIP_TOOLS = new Set([
   'Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'LS', 'Agent',
@@ -13,6 +14,7 @@ function truncate(value: any, maxLen: number): string {
 
 async function main() {
   try {
+    writeHookStatus('PostToolUse', { lastFiredAt: Date.now(), success: true });
     const input = await readStdin();
     const { tool_name, tool_input, tool_response, cwd } = input;
 
@@ -29,7 +31,8 @@ async function main() {
     });
 
     output({});
-  } catch {
+  } catch (err) {
+    writeHookStatus('PostToolUse', { lastFiredAt: Date.now(), success: false, error: String(err) });
     output({});
   }
 }
