@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
-import { spawn as cpSpawn } from 'child_process';
-import { readFileSync, writeFileSync, unlinkSync, mkdirSync, existsSync } from 'fs';
+import { spawn as cpSpawn, execFileSync } from 'child_process';
+import { readFileSync, writeFileSync, unlinkSync, mkdirSync, existsSync, statSync } from 'fs';
+import { join } from 'path';
 import {
   type QueuedObservation,
   type VaultSuggestion,
@@ -11,8 +12,13 @@ import {
   LORE_DIR,
   PID_FILE,
   SUGGESTIONS_FILE,
+  type SessionRecord,
+  type HookHeartbeat,
+  HOOK_STATUS_FILE,
+  SESSION_HISTORY_FILE,
 } from './types.js';
 import { evaluateObservations } from './evaluator.js';
+import { listVaultNotes, readVaultNote, resolveVaultPath } from './vault-reader.js';
 
 // ---------------------------------------------------------------------------
 // In-memory state
@@ -31,12 +37,24 @@ const state: DaemonState = {
 
 const app = new Hono();
 
+app.get('/', (c) => {
+  try {
+    const dashboardPath = join(__dirname, 'ui', 'dashboard.html');
+    const html = readFileSync(dashboardPath, 'utf-8');
+    return c.html(html);
+  } catch {
+    return c.text('Dashboard not found. Run the build script to generate it.', 404);
+  }
+});
+
 app.get('/health', (c) => {
   return c.json({
     status: 'ok',
     mode: state.mode,
     uptime: Date.now() - state.startedAt,
+    startedAt: state.startedAt,
     queueDepth: state.observations.length,
+    pid: process.pid,
   });
 });
 
@@ -138,6 +156,143 @@ app.post('/suggestions/dismiss', (c) => {
   } catch (err) {
     return c.json({ error: 'Failed to dismiss suggestions' }, 500);
   }
+});
+
+app.delete('/suggestions/:index', (c) => {
+  try {
+    const index = parseInt(c.req.param('index'), 10);
+    if (isNaN(index)) return c.json({ error: 'Invalid index' }, 400);
+    if (!existsSync(SUGGESTIONS_FILE)) return c.json({ error: 'No suggestions' }, 404);
+    const suggestions: VaultSuggestion[] = JSON.parse(readFileSync(SUGGESTIONS_FILE, 'utf-8'));
+    if (index < 0 || index >= suggestions.length) return c.json({ error: 'Index out of range' }, 404);
+    suggestions.splice(index, 1);
+    if (suggestions.length === 0) {
+      unlinkSync(SUGGESTIONS_FILE);
+    } else {
+      writeFileSync(SUGGESTIONS_FILE, JSON.stringify(suggestions, null, 2));
+    }
+    return c.json({ dismissed: true, remaining: suggestions.length });
+  } catch {
+    return c.json({ error: 'Failed to dismiss suggestion' }, 500);
+  }
+});
+
+app.post('/suggestions/promote/:index', (c) => {
+  try {
+    const index = parseInt(c.req.param('index'), 10);
+    if (isNaN(index)) return c.json({ error: 'Invalid index' }, 400);
+    if (!existsSync(SUGGESTIONS_FILE)) return c.json({ error: 'No suggestions' }, 404);
+    const suggestions: VaultSuggestion[] = JSON.parse(readFileSync(SUGGESTIONS_FILE, 'utf-8'));
+    if (index < 0 || index >= suggestions.length) return c.json({ error: 'Index out of range' }, 404);
+
+    const suggestion = suggestions[index];
+    const vaultPath = resolveVaultPath();
+    if (!vaultPath) return c.json({ error: 'Vault path not configured' }, 500);
+
+    const slug = suggestion.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80);
+    const filename = `${slug}.md`;
+    const filePath = join(vaultPath, filename);
+    const now = new Date().toISOString().split('T')[0];
+    const tagsYaml = suggestion.tags.length > 0 ? `tags: [${suggestion.tags.join(', ')}]` : 'tags: []';
+    const noteContent = `---\ntitle: "${suggestion.title}"\nstatus: exploratory\n${tagsYaml}\nbranch: main\ncreated: ${now}\n---\n\n${suggestion.content}\n`;
+
+    writeFileSync(filePath, noteContent);
+
+    suggestions.splice(index, 1);
+    if (suggestions.length === 0) {
+      unlinkSync(SUGGESTIONS_FILE);
+    } else {
+      writeFileSync(SUGGESTIONS_FILE, JSON.stringify(suggestions, null, 2));
+    }
+    return c.json({ promoted: true, path: filename, remaining: suggestions.length });
+  } catch {
+    return c.json({ error: 'Failed to promote suggestion' }, 500);
+  }
+});
+
+app.get('/vault/notes', (c) => {
+  try {
+    const vaultPath = resolveVaultPath();
+    if (!vaultPath) return c.json({ notes: [], error: 'Vault not configured' });
+    const filters = {
+      status: c.req.query('status') || undefined,
+      tag: c.req.query('tag') || undefined,
+      project: c.req.query('project') || undefined,
+      branch: c.req.query('branch') || undefined,
+      q: c.req.query('q') || undefined,
+    };
+    const notes = listVaultNotes(vaultPath, filters);
+    return c.json({ notes });
+  } catch {
+    return c.json({ notes: [], error: 'Failed to read vault' });
+  }
+});
+
+app.get('/vault/notes/*', (c) => {
+  try {
+    const notePath = c.req.path.replace('/vault/notes/', '');
+    if (!notePath) return c.json({ error: 'Path required' }, 400);
+    const vaultPath = resolveVaultPath();
+    if (!vaultPath) return c.json({ error: 'Vault not configured' }, 500);
+    const note = readVaultNote(vaultPath, decodeURIComponent(notePath));
+    if (!note) return c.json({ error: 'Note not found' }, 404);
+    return c.json(note);
+  } catch {
+    return c.json({ error: 'Failed to read note' }, 500);
+  }
+});
+
+app.get('/vault/git-status', (c) => {
+  try {
+    const vaultPath = resolveVaultPath();
+    if (!vaultPath) return c.json({ error: 'Vault not configured' }, 500);
+    const run = (cmd: string, args: string[]) => {
+      try {
+        return execFileSync(cmd, args, { cwd: vaultPath, timeout: 5000, encoding: 'utf-8' }).trim();
+      } catch { return ''; }
+    };
+    const status = run('git', ['status', '--porcelain']);
+    const uncommittedCount = status ? status.split('\n').filter(Boolean).length : 0;
+    let lastPull: number | null = null;
+    try {
+      const fetchHead = join(vaultPath, '.git', 'FETCH_HEAD');
+      lastPull = statSync(fetchHead).mtimeMs;
+    } catch {}
+    const behindAhead = run('git', ['rev-list', '--count', '--left-right', '@{upstream}...HEAD']);
+    let behind = 0, ahead = 0;
+    if (behindAhead) {
+      const parts = behindAhead.split('\t');
+      behind = parseInt(parts[0], 10) || 0;
+      ahead = parseInt(parts[1], 10) || 0;
+    }
+    let syncStatus = 'synced';
+    if (uncommittedCount > 0) syncStatus = 'uncommitted';
+    else if (behind > 0) syncStatus = 'behind';
+    else if (ahead > 0) syncStatus = 'ahead';
+    return c.json({ syncStatus, uncommittedCount, behind, ahead, lastPull });
+  } catch {
+    return c.json({ error: 'Failed to get git status' }, 500);
+  }
+});
+
+app.get('/hook-status', (c) => {
+  try {
+    if (existsSync(HOOK_STATUS_FILE)) {
+      const data: Record<string, HookHeartbeat> = JSON.parse(readFileSync(HOOK_STATUS_FILE, 'utf-8'));
+      return c.json(data);
+    }
+    return c.json({});
+  } catch { return c.json({}); }
+});
+
+app.get('/session-history', (c) => {
+  try {
+    if (existsSync(SESSION_HISTORY_FILE)) {
+      const data: SessionRecord[] = JSON.parse(readFileSync(SESSION_HISTORY_FILE, 'utf-8'));
+      return c.json({ sessions: data.reverse() });
+    }
+    return c.json({ sessions: [] });
+  } catch { return c.json({ sessions: [] }); }
 });
 
 // ---------------------------------------------------------------------------
