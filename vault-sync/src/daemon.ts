@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { spawn as cpSpawn, execFileSync } from 'child_process';
-import { readFileSync, writeFileSync, unlinkSync, mkdirSync, existsSync, statSync } from 'fs';
+import { readFileSync, writeFileSync, unlinkSync, mkdirSync, existsSync, statSync, renameSync } from 'fs';
 import { join } from 'path';
 import {
   type QueuedObservation,
@@ -30,6 +30,73 @@ const state: DaemonState = {
   pendingSuggestions: [],
   startedAt: Date.now(),
 };
+
+// ---------------------------------------------------------------------------
+// Background evaluation
+// ---------------------------------------------------------------------------
+
+function evaluateInBackground(observations: QueuedObservation[]) {
+  evaluateObservations(observations)
+    .then((suggestions) => {
+      // Write session history
+      const record: SessionRecord = {
+        startedAt: state.startedAt,
+        endedAt: Date.now(),
+        observationCount: observations.length,
+        suggestionCount: suggestions.length,
+        suggestions: suggestions.map(s => ({ title: s.title, confidence: s.confidence })),
+      };
+      writeSessionHistory(record);
+
+      if (suggestions.length > 0) {
+        // Merge with existing suggestions file
+        let existing: VaultSuggestion[] = [];
+        try {
+          if (existsSync(SUGGESTIONS_FILE)) {
+            existing = JSON.parse(readFileSync(SUGGESTIONS_FILE, 'utf-8'));
+          }
+        } catch { /* corrupted file, start fresh */ }
+
+        const merged = [...existing, ...suggestions];
+        mkdirSync(LORE_DIR, { recursive: true });
+        writeFileSync(SUGGESTIONS_FILE, JSON.stringify(merged, null, 2));
+        console.error(`[vault-sync] ${suggestions.length} new suggestions saved (${merged.length} total)`);
+      } else {
+        console.error(`[vault-sync] no vault-worthy observations found`);
+      }
+    })
+    .catch((err) => {
+      console.error(`[vault-sync] background evaluation error: ${err}`);
+      // Still write session history on failure
+      const record: SessionRecord = {
+        startedAt: state.startedAt,
+        endedAt: Date.now(),
+        observationCount: observations.length,
+        suggestionCount: 0,
+        suggestions: [],
+      };
+      writeSessionHistory(record);
+    });
+}
+
+function writeSessionHistory(record: SessionRecord) {
+  try {
+    mkdirSync(LORE_DIR, { recursive: true });
+    let history: SessionRecord[] = [];
+    try {
+      if (existsSync(SESSION_HISTORY_FILE)) {
+        history = JSON.parse(readFileSync(SESSION_HISTORY_FILE, 'utf-8'));
+      }
+    } catch { /* start fresh */ }
+    history.push(record);
+    if (history.length > 50) history = history.slice(-50);
+    const tmp = SESSION_HISTORY_FILE + '.tmp';
+    writeFileSync(tmp, JSON.stringify(history, null, 2));
+    renameSync(tmp, SESSION_HISTORY_FILE);
+  } catch (err) {
+    console.error(`[vault-sync] session history write error: ${err}`);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Hono app
@@ -95,42 +162,26 @@ app.post('/suggestions', async (c) => {
 
 app.post('/evaluate', async (c) => {
   try {
-    const count = state.observations.length;
+    const body = await c.req.json().catch(() => null);
+    const observations: QueuedObservation[] = body?.observations || [];
 
-    if (count === 0) {
-      return c.json({ evaluated: 0, suggestions: 0 });
+    // Also drain any queued observations
+    const queued = state.observations.splice(0);
+    const allObservations = [...queued, ...observations];
+
+    if (allObservations.length === 0) {
+      return c.json({ accepted: 0 });
     }
 
-    console.error(`[vault-sync] evaluating ${count} observations...`);
+    console.error(`[vault-sync] accepted ${allObservations.length} observations for background evaluation`);
 
-    // Drain the queue
-    const batch = state.observations.splice(0);
+    // Respond immediately, evaluate in background
+    evaluateInBackground(allObservations);
 
-    const suggestions = await evaluateObservations(batch);
-
-    if (suggestions.length > 0) {
-      // Merge with existing suggestions file
-      let existing: VaultSuggestion[] = [];
-      try {
-        if (existsSync(SUGGESTIONS_FILE)) {
-          existing = JSON.parse(readFileSync(SUGGESTIONS_FILE, 'utf-8'));
-        }
-      } catch {
-        // corrupted file, start fresh
-      }
-
-      const merged = [...existing, ...suggestions];
-      mkdirSync(LORE_DIR, { recursive: true });
-      writeFileSync(SUGGESTIONS_FILE, JSON.stringify(merged, null, 2));
-      console.error(`[vault-sync] ${suggestions.length} new suggestions saved (${merged.length} total)`);
-    } else {
-      console.error(`[vault-sync] no vault-worthy observations found`);
-    }
-
-    return c.json({ evaluated: count, suggestions: suggestions.length });
+    return c.json({ accepted: allObservations.length });
   } catch (err) {
-    console.error(`[vault-sync] evaluation error: ${err}`);
-    return c.json({ error: 'Evaluation failed' }, 500);
+    console.error(`[vault-sync] evaluate endpoint error: ${err}`);
+    return c.json({ error: 'Failed to accept observations' }, 500);
   }
 });
 
