@@ -11,6 +11,14 @@ interface Suggestion {
   tags: string[];
 }
 
+interface VaultNoteSummary {
+  title: string;
+  status: string;
+  created: string;
+  project: string;
+  tags: string[];
+}
+
 function formatSuggestions(suggestions: Suggestion[]): string {
   const lines: string[] = [
     '## Vault Suggestions',
@@ -52,9 +60,19 @@ async function main() {
       }
     }
 
-    // Fetch suggestions
-    const suggestionsResp = await daemonRequest('GET', '/suggestions');
+    // Fetch suggestions and vault notes in parallel
+    const [suggestionsResp, notesResp] = await Promise.all([
+      daemonRequest('GET', '/suggestions'),
+      daemonRequest('GET', '/vault/notes'),
+    ]);
     const suggestions = suggestionsResp?.suggestions || (Array.isArray(suggestionsResp) ? suggestionsResp : []);
+    const allNotes: VaultNoteSummary[] = notesResp?.notes || [];
+
+    // Get recent knowledge notes (exclude index/template pages)
+    const knowledgeNotes = allNotes
+      .filter((n: VaultNoteSummary) => n.status && n.created)
+      .sort((a: VaultNoteSummary, b: VaultNoteSummary) => b.created.localeCompare(a.created))
+      .slice(0, 5);
 
     const contextLines: string[] = ['Lore dashboard: http://localhost:37778'];
 
@@ -66,10 +84,34 @@ async function main() {
       await daemonRequest('POST', '/suggestions/dismiss');
     }
 
+    if (knowledgeNotes.length > 0) {
+      contextLines.push('');
+      contextLines.push('## Recent Vault Notes');
+      for (const n of knowledgeNotes) {
+        contextLines.push(`- **${n.title}** (${n.status}, ${n.created}) [${n.tags.join(', ')}]`);
+      }
+    }
+
+    // Build user-visible terminal output
+    const displayLines: string[] = [`Lore dashboard: http://localhost:37778 | ${allNotes.length} vault notes`];
+    if (suggestions.length > 0) {
+      displayLines.push(`${suggestions.length} pending suggestion${suggestions.length > 1 ? 's' : ''} — use /vault-note to capture`);
+    }
+    if (knowledgeNotes.length > 0) {
+      displayLines.push('');
+      displayLines.push('Recent:');
+      for (const n of knowledgeNotes) {
+        const tags = n.tags.length > 0 ? ` [${n.tags.join(', ')}]` : '';
+        displayLines.push(`  ${n.status === 'promoted' ? '✓' : '○'} ${n.title}${tags}`);
+      }
+    }
+
     output({
       hookSpecificOutput: {
+        hookEventName: 'SessionStart',
         additionalContext: contextLines.join('\n'),
       },
+      systemMessage: displayLines.join('\n'),
     });
   } catch (err) {
     writeHookStatus('SessionStart', { lastFiredAt: Date.now(), success: false, error: String(err) });
