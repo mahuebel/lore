@@ -53,7 +53,7 @@ Remotion-based animations for project demos and documentation.
 
 ## Quick Start
 
-### 1. Create your team vault
+### 1. Create your team vault (global default)
 
 Go to [mahuebel/vault-template](https://github.com/mahuebel/vault-template) and click **"Use this template"** to create your team's vault repo. Then clone it locally:
 
@@ -108,6 +108,63 @@ This adds skills, hooks, and the promoter agent. See [Editor Compatibility](#edi
 ### 5. Open in Obsidian (optional)
 
 Open your vault folder as an Obsidian vault for visual browsing, graph view, and manual editing.
+
+---
+
+## Per-Repo Vaults
+
+By default, Lore uses a single global vault at `~/.lore/vault/`. This works well for teams working on related products that share conventions and architecture knowledge. But if you work across unrelated projects — or as a freelancer switching between clients — you may want a separate vault per repository.
+
+### When to use per-repo vaults
+
+- **Global vault (default):** Best for teams on related products who benefit from shared context across repos
+- **Per-repo vault:** Best for unrelated projects, freelancers with multiple clients, or repos with sensitive knowledge that shouldn't leak across projects
+
+### Quick start
+
+Run the setup wizard in any project:
+
+```
+/vault-setup --project
+```
+
+This creates a `.lore/config.json` in your project root with your vault configuration.
+
+### Configuration format
+
+The `.lore/config.json` file:
+
+```json
+{
+  "vault_path": "~/.lore/vaults/my-project",
+  "vault_remote": "git@github.com:user/my-project-vault.git",
+  "author": "your-username"
+}
+```
+
+### Resolution chain
+
+When vault-mcp starts, it resolves the vault path using this priority order:
+
+1. **`.lore/config.json`** in the project's working directory (highest priority)
+2. **`VAULT_PATH`** environment variable
+3. **`~/.lore/vault/`** global default (lowest priority)
+
+This means per-repo configs override the global setup without requiring any environment variable changes.
+
+### Default path convention
+
+Per-repo vaults are stored at `~/.lore/vaults/<repo-name>/` by convention. This keeps them outside the project directory (so they don't clutter your repo) while keeping each project's knowledge separate.
+
+### Cross-tool support
+
+Per-repo vault resolution works with any MCP client:
+
+- **Claude Code** — user-scoped registration via `claude mcp add --scope user`, project resolved from `process.cwd()`
+- **Cursor** — project-scoped `.cursor/mcp.json`, project resolved from workspace root
+- **Any MCP client** — as long as the server starts in the project directory, `.lore/config.json` will be found
+
+Because the resolution happens inside the MCP server, you can register vault-mcp once globally and it will automatically use the right vault for each project.
 
 ---
 

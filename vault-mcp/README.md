@@ -137,8 +137,21 @@ Notes are placed automatically based on tags:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `VAULT_PATH` | Yes | Absolute path to the vault git repo |
+| `VAULT_PATH` | No | Absolute path to the vault git repo (overrides dynamic resolution) |
 | `VAULT_AUTHOR` | Yes | GitHub username (used in frontmatter and commit messages) |
+
+## Dynamic Vault Resolution
+
+When `VAULT_PATH` is not set as an environment variable, the server dynamically resolves the vault location at startup:
+
+1. **Project config** — checks for `.lore/config.json` in the project's working directory. If found, uses the `vault_path` specified there.
+2. **Global default** — falls back to `~/.lore/vault/`.
+
+For **user-scoped MCP registrations** (e.g., `claude mcp add --scope user`), the project directory is determined by `process.cwd()` — the directory where the MCP server process is launched, which is typically the project root.
+
+This means you can register vault-mcp once globally without a `VAULT_PATH` and it will automatically use the correct vault for each project based on its `.lore/config.json`.
+
+> **v1 limitation:** Vault resolution happens once at server startup based on `process.cwd()`. For user-scoped registrations where a single server instance may serve multiple projects, the vault is fixed for the lifetime of that server process. Future versions may use the MCP `roots` capability to support true per-call vault resolution.
 
 ## Companion Plugin
 
