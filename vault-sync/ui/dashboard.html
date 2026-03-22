@@ -36,6 +36,12 @@
   .mode-badge.supercharged { background: #1f6feb33; color: #58a6ff; }
   .mode-badge.standalone { background: #30363d; color: #8b949e; }
   .auto-refresh { font-size: 11px; color: #8b949e; }
+  .vault-selector {
+    background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
+    border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer;
+  }
+  .vault-selector:focus { border-color: #58a6ff; outline: none; }
+  .vault-label { font-size: 11px; color: #8b949e; margin-top: 4px; }
 
   /* Dashboard Grid */
   .dashboard {
@@ -272,6 +278,9 @@
   <h1><span class="health-dot" id="health-dot"></span> Vault Sync Dashboard</h1>
   <div style="display: flex; align-items: center; gap: 12px;">
     <span class="mode-badge standalone" id="mode-badge">Standalone Mode</span>
+    <select id="vaultSelector" class="vault-selector" onchange="onVaultChange()">
+      <option value="">All Vaults</option>
+    </select>
     <span class="auto-refresh">Auto-refresh: 5s</span>
   </div>
 </div>
@@ -442,8 +451,22 @@
   // -------------------------------------------------------------------------
   var API = '';
   function api(path) { return fetch(API + path).then(function(r) { return r.json(); }); }
-  function apiPost(path) { return fetch(API + path, { method: 'POST' }).then(function(r) { return r.json(); }); }
-  function apiDelete(path) { return fetch(API + path, { method: 'DELETE' }).then(function(r) { return r.json(); }); }
+  function apiPost(path, body) {
+    var opts = { method: 'POST' };
+    if (body) {
+      opts.headers = { 'Content-Type': 'application/json' };
+      opts.body = JSON.stringify(body);
+    }
+    return fetch(API + path, opts).then(function(r) { return r.json(); });
+  }
+  function apiDelete(path, body) {
+    var opts = { method: 'DELETE' };
+    if (body) {
+      opts.headers = { 'Content-Type': 'application/json' };
+      opts.body = JSON.stringify(body);
+    }
+    return fetch(API + path, opts).then(function(r) { return r.json(); });
+  }
 
   // -------------------------------------------------------------------------
   // Utilities
@@ -545,7 +568,32 @@
   var currentFilters = {};
   var debounceTimer = null;
   var selectedNotePath = null;
+  var currentVault = '';
   var ALL_HOOKS = ['Setup', 'SessionStart', 'PostToolUse', 'UserPromptSubmit', 'Stop', 'SessionEnd'];
+
+  // Vault selector (exposed globally for onchange handler)
+  window.onVaultChange = function() {
+    currentVault = $('vaultSelector').value;
+    refreshSuggestions();
+    refreshVaultNotes();
+    refreshGitStatus();
+  };
+
+  function populateVaultSelector(vaults) {
+    var sel = $('vaultSelector');
+    var existing = {};
+    for (var i = 0; i < sel.options.length; i++) {
+      existing[sel.options[i].value] = true;
+    }
+    Object.keys(vaults).forEach(function(v) {
+      if (!existing[v]) {
+        var opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v.split('/').pop();
+        sel.appendChild(opt);
+      }
+    });
+  }
 
   // -------------------------------------------------------------------------
   // Refresh: Health
@@ -606,9 +654,17 @@
   // Refresh: Suggestions
   // -------------------------------------------------------------------------
   function refreshSuggestions() {
-    return api('/suggestions').then(function(data) {
+    var url = '/suggestions';
+    if (currentVault) url += '?vault=' + encodeURIComponent(currentVault);
+
+    return api(url).then(function(data) {
       var container = $('suggestions-container');
       var suggestions = data.suggestions || [];
+
+      // Populate vault selector from vaults map when viewing all
+      if (!currentVault && data.vaults) {
+        populateVaultSelector(data.vaults);
+      }
 
       setText('pipeline-suggestions', String(suggestions.length));
 
@@ -630,6 +686,10 @@
         card.appendChild(createElement('div', { className: 'suggestion-content', textContent: s.content }));
 
         var meta = createElement('div', { className: 'suggestion-meta' });
+        // Show vault label when viewing all vaults
+        if (!currentVault && s.vault) {
+          meta.appendChild(createElement('span', { className: 'tag', textContent: s.vault.split('/').pop() }));
+        }
         (s.tags || []).forEach(function(t) {
           meta.appendChild(createElement('span', { className: 'tag', textContent: t }));
         });
@@ -642,12 +702,12 @@
         actions.appendChild(createElement('button', {
           className: 'btn btn-promote',
           textContent: 'Promote',
-          onclick: (function(idx) { return function() { promoteSuggestion(idx); }; })(i)
+          onclick: (function(idx, vault) { return function() { promoteSuggestion(idx, vault); }; })(i, s.vault || currentVault)
         }));
         actions.appendChild(createElement('button', {
           className: 'btn btn-dismiss',
           textContent: 'Dismiss',
-          onclick: (function(idx) { return function() { dismissSuggestion(idx); }; })(i)
+          onclick: (function(idx, vault) { return function() { dismissSuggestion(idx, vault); }; })(i, s.vault || currentVault)
         }));
         card.appendChild(actions);
 
@@ -665,6 +725,7 @@
   // -------------------------------------------------------------------------
   function refreshVaultNotes() {
     var params = new URLSearchParams();
+    if (currentVault) params.set('vault', currentVault);
     if (currentFilters.status) params.set('status', currentFilters.status);
     if (currentFilters.tag) params.set('tag', currentFilters.tag);
     if (currentFilters.q) params.set('q', currentFilters.q);
@@ -808,7 +869,9 @@
   // Refresh: Git Status
   // -------------------------------------------------------------------------
   function refreshGitStatus() {
-    return api('/vault/git-status').then(function(data) {
+    var url = '/vault/git-status';
+    if (currentVault) url += '?vault=' + encodeURIComponent(currentVault);
+    return api(url).then(function(data) {
       if (data.error) {
         setText('git-sync-status', 'N/A');
         setText('git-last-pull', 'N/A');
@@ -971,16 +1034,18 @@
   }
 
   // Promote / Dismiss
-  function promoteSuggestion(index) {
-    apiPost('/suggestions/promote/' + index).then(function() {
+  function promoteSuggestion(index, vault) {
+    var body = vault ? { vault: vault } : undefined;
+    apiPost('/suggestions/promote/' + index, body).then(function() {
       return Promise.all([refreshSuggestions(), refreshVaultNotes()]);
     }).catch(function() {
       window.alert('Failed to promote suggestion');
     });
   }
 
-  function dismissSuggestion(index) {
-    apiDelete('/suggestions/' + index).then(function() {
+  function dismissSuggestion(index, vault) {
+    var body = vault ? { vault: vault } : undefined;
+    apiDelete('/suggestions/' + index, body).then(function() {
       return refreshSuggestions();
     }).catch(function() {
       window.alert('Failed to dismiss suggestion');
