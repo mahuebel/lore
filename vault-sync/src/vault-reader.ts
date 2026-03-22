@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'fs';
+import { readdirSync, readFileSync } from 'fs';
 import { join, basename } from 'path';
 
 export interface VaultNote {
@@ -156,31 +156,3 @@ export function readVaultNote(vaultPath: string, notePath: string): VaultNote | 
   }
 }
 
-export function resolveVaultPath(): string | null {
-  if (process.env.VAULT_PATH) return process.env.VAULT_PATH;
-
-  const homeDir = process.env.HOME || '/tmp';
-  const candidates = [
-    join(homeDir, '.lore', 'vault'),
-    join(homeDir, 'vault'),
-    join(homeDir, 'obsidian', 'team-vault'),
-  ];
-
-  for (const candidate of candidates) {
-    try {
-      const configPath = join(candidate, '.vault-mcp.json');
-      const config = JSON.parse(readFileSync(configPath, 'utf-8'));
-      if (config.vault_path) return config.vault_path;
-    } catch {
-      // try next
-    }
-  }
-
-  const fallback = join(homeDir, '.lore', 'vault');
-  try {
-    statSync(fallback);
-    return fallback;
-  } catch {
-    return null;
-  }
-}

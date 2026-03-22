@@ -14,6 +14,9 @@ export interface VaultSuggestion {
   evaluatedAt: number;
 }
 
+/** Suggestions keyed by normalized vault path */
+export type VaultKeyedSuggestions = Record<string, VaultSuggestion[]>;
+
 export interface DaemonState {
   mode: 'standalone' | 'supercharged';
   observations: QueuedObservation[];

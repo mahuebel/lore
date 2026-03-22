@@ -6,6 +6,7 @@ import { join } from 'path';
 import {
   type QueuedObservation,
   type VaultSuggestion,
+  type VaultKeyedSuggestions,
   type DaemonState,
   DAEMON_PORT,
   CLAUDE_MEM_PORT,
@@ -18,7 +19,9 @@ import {
   SESSION_HISTORY_FILE,
 } from './types.js';
 import { evaluateObservations } from './evaluator.js';
-import { listVaultNotes, readVaultNote, resolveVaultPath } from './vault-reader.js';
+import { listVaultNotes, readVaultNote } from './vault-reader.js';
+import { resolveVaultForProject, normalizePath } from './vault-resolver.js';
+import { homedir } from 'node:os';
 
 // ---------------------------------------------------------------------------
 // In-memory state
@@ -53,18 +56,57 @@ const evalStatus: EvalStatus = {
 // Background evaluation
 // ---------------------------------------------------------------------------
 
+function readSuggestionsFile(): VaultKeyedSuggestions {
+  try {
+    if (!existsSync(SUGGESTIONS_FILE)) return {};
+    const raw = JSON.parse(readFileSync(SUGGESTIONS_FILE, 'utf-8'));
+    // Migration: flat array → keyed object
+    if (Array.isArray(raw)) {
+      const globalVault = join(homedir(), '.lore', 'vault');
+      return { [globalVault]: raw };
+    }
+    return raw as VaultKeyedSuggestions;
+  } catch {
+    return {};
+  }
+}
+
+function writeSuggestionsFile(data: VaultKeyedSuggestions): void {
+  mkdirSync(LORE_DIR, { recursive: true });
+  const cleaned: VaultKeyedSuggestions = {};
+  for (const [key, suggestions] of Object.entries(data)) {
+    if (suggestions.length > 0) cleaned[key] = suggestions;
+  }
+  if (Object.keys(cleaned).length === 0) {
+    try { if (existsSync(SUGGESTIONS_FILE)) unlinkSync(SUGGESTIONS_FILE); } catch {}
+    return;
+  }
+  const tmp = SUGGESTIONS_FILE + '.tmp';
+  writeFileSync(tmp, JSON.stringify(cleaned, null, 2));
+  renameSync(tmp, SUGGESTIONS_FILE);
+}
+
+function resolveVaultFromQuery(c: any): string | null {
+  const vaultParam = c.req.query('vault');
+  if (vaultParam) return normalizePath(vaultParam);
+  return resolveVaultForProject(process.cwd());
+}
+
 function evaluateInBackground(observations: QueuedObservation[]) {
   evalStatus.state = 'evaluating';
   evalStatus.observationCount = observations.length;
   evalStatus.startedAt = Date.now();
   evalStatus.lastError = null;
 
+  const primaryCwd = observations.find(o => o.cwd)?.cwd || process.cwd();
+  const vaultPath = resolveVaultForProject(primaryCwd) || join(homedir(), '.lore', 'vault');
+
   evaluateObservations(observations)
     .then((suggestions) => {
       evalStatus.state = 'idle';
       evalStatus.completedAt = Date.now();
       evalStatus.lastSuggestionCount = suggestions.length;
-      // Write session history
+
       const record: SessionRecord = {
         startedAt: state.startedAt,
         endedAt: Date.now(),
@@ -75,18 +117,11 @@ function evaluateInBackground(observations: QueuedObservation[]) {
       writeSessionHistory(record);
 
       if (suggestions.length > 0) {
-        // Merge with existing suggestions file
-        let existing: VaultSuggestion[] = [];
-        try {
-          if (existsSync(SUGGESTIONS_FILE)) {
-            existing = JSON.parse(readFileSync(SUGGESTIONS_FILE, 'utf-8'));
-          }
-        } catch { /* corrupted file, start fresh */ }
-
-        const merged = [...existing, ...suggestions];
-        mkdirSync(LORE_DIR, { recursive: true });
-        writeFileSync(SUGGESTIONS_FILE, JSON.stringify(merged, null, 2));
-        console.error(`[vault-sync] ${suggestions.length} new suggestions saved (${merged.length} total)`);
+        const existing = readSuggestionsFile();
+        const vaultSuggestions = existing[vaultPath] || [];
+        existing[vaultPath] = [...vaultSuggestions, ...suggestions];
+        writeSuggestionsFile(existing);
+        console.error(`[vault-sync] ${suggestions.length} new suggestions saved for ${vaultPath}`);
       } else {
         console.error(`[vault-sync] no vault-worthy observations found`);
       }
@@ -97,7 +132,6 @@ function evaluateInBackground(observations: QueuedObservation[]) {
       evalStatus.lastError = String(err);
       evalStatus.lastSuggestionCount = 0;
       console.error(`[vault-sync] background evaluation error: ${err}`);
-      // Still write session history on failure
       const record: SessionRecord = {
         startedAt: state.startedAt,
         endedAt: Date.now(),
@@ -173,19 +207,14 @@ app.post('/observations/drain', (c) => {
 
 app.post('/suggestions', async (c) => {
   try {
-    const incoming: VaultSuggestion[] = await c.req.json();
-    let existing: VaultSuggestion[] = [];
-    try {
-      if (existsSync(SUGGESTIONS_FILE)) {
-        existing = JSON.parse(readFileSync(SUGGESTIONS_FILE, 'utf-8'));
-      }
-    } catch {
-      // corrupted, start fresh
-    }
-    const merged = [...existing, ...incoming];
-    mkdirSync(LORE_DIR, { recursive: true });
-    writeFileSync(SUGGESTIONS_FILE, JSON.stringify(merged, null, 2));
-    return c.json({ saved: incoming.length, total: merged.length });
+    const body = await c.req.json();
+    const vaultParam = (body as any)?.vault;
+    const incoming: VaultSuggestion[] = (body as any)?.suggestions || (Array.isArray(body) ? body : []);
+    const all = readSuggestionsFile();
+    const key = vaultParam ? normalizePath(vaultParam) : join(homedir(), '.lore', 'vault');
+    all[key] = [...(all[key] || []), ...incoming];
+    writeSuggestionsFile(all);
+    return c.json({ saved: incoming.length, total: all[key].length });
   } catch {
     return c.json({ error: 'Invalid suggestions payload' }, 400);
   }
@@ -217,59 +246,70 @@ app.post('/evaluate', async (c) => {
 });
 
 app.get('/suggestions', (c) => {
-  try {
-    if (existsSync(SUGGESTIONS_FILE)) {
-      const raw = readFileSync(SUGGESTIONS_FILE, 'utf-8');
-      const suggestions: VaultSuggestion[] = JSON.parse(raw);
-      return c.json({ suggestions });
-    }
-    return c.json({ suggestions: [] });
-  } catch (err) {
-    return c.json({ suggestions: [] });
+  const all = readSuggestionsFile();
+  const vaultParam = c.req.query('vault');
+  if (vaultParam) {
+    const key = normalizePath(vaultParam);
+    return c.json({ suggestions: all[key] || [] });
   }
+  const flat = Object.values(all).flat();
+  return c.json({ suggestions: flat, vaults: all });
 });
 
-app.post('/suggestions/dismiss', (c) => {
+app.post('/suggestions/dismiss', async (c) => {
   try {
-    if (existsSync(SUGGESTIONS_FILE)) {
-      unlinkSync(SUGGESTIONS_FILE);
+    const body = await c.req.json().catch(() => ({}));
+    const vaultParam = (body as any)?.vault;
+    if (vaultParam) {
+      const key = normalizePath(vaultParam);
+      const all = readSuggestionsFile();
+      delete all[key];
+      writeSuggestionsFile(all);
+    } else {
+      if (existsSync(SUGGESTIONS_FILE)) unlinkSync(SUGGESTIONS_FILE);
     }
     return c.json({ dismissed: true });
-  } catch (err) {
+  } catch {
     return c.json({ error: 'Failed to dismiss suggestions' }, 500);
   }
 });
 
-app.delete('/suggestions/:index', (c) => {
+app.delete('/suggestions/:index', async (c) => {
   try {
     const index = parseInt(c.req.param('index'), 10);
     if (isNaN(index)) return c.json({ error: 'Invalid index' }, 400);
-    if (!existsSync(SUGGESTIONS_FILE)) return c.json({ error: 'No suggestions' }, 404);
-    const suggestions: VaultSuggestion[] = JSON.parse(readFileSync(SUGGESTIONS_FILE, 'utf-8'));
+    const body = await c.req.json().catch(() => ({}));
+    const vaultParam = (body as any)?.vault;
+    if (!vaultParam) return c.json({ error: 'vault parameter required' }, 400);
+    const all = readSuggestionsFile();
+    const key = normalizePath(vaultParam);
+    if (!all[key]) return c.json({ error: 'No suggestions for vault' }, 404);
+    const suggestions = all[key];
     if (index < 0 || index >= suggestions.length) return c.json({ error: 'Index out of range' }, 404);
     suggestions.splice(index, 1);
-    if (suggestions.length === 0) {
-      unlinkSync(SUGGESTIONS_FILE);
-    } else {
-      writeFileSync(SUGGESTIONS_FILE, JSON.stringify(suggestions, null, 2));
-    }
+    if (suggestions.length === 0) delete all[key];
+    writeSuggestionsFile(all);
     return c.json({ dismissed: true, remaining: suggestions.length });
   } catch {
     return c.json({ error: 'Failed to dismiss suggestion' }, 500);
   }
 });
 
-app.post('/suggestions/promote/:index', (c) => {
+app.post('/suggestions/promote/:index', async (c) => {
   try {
     const index = parseInt(c.req.param('index'), 10);
     if (isNaN(index)) return c.json({ error: 'Invalid index' }, 400);
-    if (!existsSync(SUGGESTIONS_FILE)) return c.json({ error: 'No suggestions' }, 404);
-    const suggestions: VaultSuggestion[] = JSON.parse(readFileSync(SUGGESTIONS_FILE, 'utf-8'));
+    const body = await c.req.json().catch(() => ({}));
+    const vaultParam = (body as any)?.vault;
+    if (!vaultParam) return c.json({ error: 'vault parameter required' }, 400);
+    const all = readSuggestionsFile();
+    const key = normalizePath(vaultParam);
+    if (!all[key]) return c.json({ error: 'No suggestions for vault' }, 404);
+    const suggestions = all[key];
     if (index < 0 || index >= suggestions.length) return c.json({ error: 'Index out of range' }, 404);
 
     const suggestion = suggestions[index];
-    const vaultPath = resolveVaultPath();
-    if (!vaultPath) return c.json({ error: 'Vault path not configured' }, 500);
+    const vaultPath = key;
 
     const slug = suggestion.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80);
     const filename = `${slug}.md`;
@@ -281,12 +321,9 @@ app.post('/suggestions/promote/:index', (c) => {
     writeFileSync(filePath, noteContent);
 
     suggestions.splice(index, 1);
-    if (suggestions.length === 0) {
-      unlinkSync(SUGGESTIONS_FILE);
-    } else {
-      writeFileSync(SUGGESTIONS_FILE, JSON.stringify(suggestions, null, 2));
-    }
-    return c.json({ promoted: true, path: filename, remaining: suggestions.length });
+    if (suggestions.length === 0) delete all[key];
+    writeSuggestionsFile(all);
+    return c.json({ promoted: true, path: filename, vault: vaultPath, remaining: suggestions.length });
   } catch {
     return c.json({ error: 'Failed to promote suggestion' }, 500);
   }
@@ -294,7 +331,7 @@ app.post('/suggestions/promote/:index', (c) => {
 
 app.get('/vault/notes', (c) => {
   try {
-    const vaultPath = resolveVaultPath();
+    const vaultPath = resolveVaultFromQuery(c);
     if (!vaultPath) return c.json({ notes: [], error: 'Vault not configured' });
     const filters = {
       status: c.req.query('status') || undefined,
@@ -314,7 +351,7 @@ app.get('/vault/notes/*', (c) => {
   try {
     const notePath = c.req.path.replace('/vault/notes/', '');
     if (!notePath) return c.json({ error: 'Path required' }, 400);
-    const vaultPath = resolveVaultPath();
+    const vaultPath = resolveVaultFromQuery(c);
     if (!vaultPath) return c.json({ error: 'Vault not configured' }, 500);
     const note = readVaultNote(vaultPath, decodeURIComponent(notePath));
     if (!note) return c.json({ error: 'Note not found' }, 404);
@@ -326,7 +363,7 @@ app.get('/vault/notes/*', (c) => {
 
 app.get('/vault/git-status', (c) => {
   try {
-    const vaultPath = resolveVaultPath();
+    const vaultPath = resolveVaultFromQuery(c);
     if (!vaultPath) return c.json({ error: 'Vault not configured' }, 500);
     const run = (cmd: string, args: string[]) => {
       try {
