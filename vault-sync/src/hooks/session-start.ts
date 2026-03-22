@@ -2,6 +2,7 @@ import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { readStdin, daemonRequest, output } from './utils.js';
 import { writeHookStatus } from '../hook-heartbeat.js';
+import { resolveVaultForProject } from '../vault-resolver.js';
 
 const RESOLVED_PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
 
@@ -60,10 +61,14 @@ async function main() {
       }
     }
 
+    // Resolve current vault for scoped queries
+    const currentVault = resolveVaultForProject(process.cwd());
+    const vaultQuery = currentVault ? `?vault=${encodeURIComponent(currentVault)}` : '';
+
     // Fetch suggestions and vault notes in parallel
     const [suggestionsResp, notesResp] = await Promise.all([
-      daemonRequest('GET', '/suggestions'),
-      daemonRequest('GET', '/vault/notes'),
+      daemonRequest('GET', `/suggestions${vaultQuery}`),
+      daemonRequest('GET', `/vault/notes${vaultQuery}`),
     ]);
     const suggestions = suggestionsResp?.suggestions || (Array.isArray(suggestionsResp) ? suggestionsResp : []);
     const allNotes: VaultNoteSummary[] = notesResp?.notes || [];
@@ -81,7 +86,9 @@ async function main() {
       contextLines.push(formatSuggestions(suggestions));
 
       // Dismiss shown suggestions
-      await daemonRequest('POST', '/suggestions/dismiss');
+      await daemonRequest('POST', '/suggestions/dismiss',
+        currentVault ? { vault: currentVault } : undefined
+      );
     }
 
     if (knowledgeNotes.length > 0) {

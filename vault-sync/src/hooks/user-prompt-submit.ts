@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { readStdin, output } from './utils.js';
 import { writeHookStatus } from '../hook-heartbeat.js';
+import { resolveVaultForProject } from '../vault-resolver.js';
 
 const STOP_WORDS = new Set([
   'the', 'is', 'a', 'an', 'to', 'in', 'for', 'of', 'and', 'or', 'but',
@@ -110,7 +111,7 @@ async function main() {
       output({});
     }
 
-    const vaultPath = process.env.VAULT_PATH;
+    const vaultPath = resolveVaultForProject(process.cwd());
     if (!vaultPath) {
       output({});
     }
