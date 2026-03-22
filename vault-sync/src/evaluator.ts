@@ -46,9 +46,13 @@ If nothing is vault-worthy, return: []`;
   let queryFn: any = null;
   try {
     const sdk = await import('@anthropic-ai/claude-agent-sdk');
+    process.stderr.write(`[vault-sync] SDK loaded, exports: ${Object.keys(sdk).join(', ')}\n`);
     queryFn = sdk.query;
-  } catch {
-    process.stderr.write('[vault-sync] Agent SDK not available, evaluation disabled\n');
+    if (!queryFn) {
+      process.stderr.write(`[vault-sync] sdk.query is ${typeof queryFn} — SDK may have changed API\n`);
+    }
+  } catch (err) {
+    process.stderr.write(`[vault-sync] Agent SDK not available: ${err}\n`);
   }
 
   if (!queryFn) return [];
@@ -62,12 +66,15 @@ If nothing is vault-worthy, return: []`;
       ],
     };
 
+    process.stderr.write(`[vault-sync] calling sdk.query with ${observations.length} observations...\n`);
     let resultText = '';
     for await (const message of queryFn({ prompt, options })) {
+      process.stderr.write(`[vault-sync] SDK message type: ${message.type}\n`);
       if (message.type === 'result') {
         resultText = message.result;
       }
     }
+    process.stderr.write(`[vault-sync] SDK result (${resultText.length} chars): ${resultText.slice(0, 200)}\n`);
 
     // Strip markdown code fences if present
     const cleaned = resultText
@@ -89,7 +96,8 @@ If nothing is vault-worthy, return: []`;
       confidence: item.confidence,
       evaluatedAt: Date.now(),
     }));
-  } catch {
+  } catch (err) {
+    process.stderr.write(`[vault-sync] evaluation error: ${err}\n`);
     return [];
   }
 }

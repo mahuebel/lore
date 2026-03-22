@@ -51,12 +51,31 @@ if (args.length === 0) {
 args[0] = fixBrokenScriptPath(args[0]);
 
 if (!existsSync(args[0])) {
-  process.stderr.write(`[vault-sync] script not found: ${args[0]}\n`);
-  process.stderr.write(`[vault-sync] CLAUDE_PLUGIN_ROOT=${process.env.CLAUDE_PLUGIN_ROOT || '(not set)'}\n`);
-  process.stderr.write(`[vault-sync] resolved root=${RESOLVED_PLUGIN_ROOT}\n`);
-  // Output empty JSON so hook doesn't block
-  console.log('{}');
-  process.exit(0);
+  // Self-heal: attempt install + build before giving up
+  try {
+    process.stderr.write(`[vault-sync] script not found: ${args[0]}, attempting auto-build...\n`);
+    const { execFileSync } = await import('child_process');
+    if (!existsSync(join(RESOLVED_PLUGIN_ROOT, 'node_modules'))) {
+      execFileSync('npm', ['install', '--no-audit', '--no-fund'], {
+        cwd: RESOLVED_PLUGIN_ROOT, stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000,
+      });
+    }
+    execFileSync('node', ['build.js'], {
+      cwd: RESOLVED_PLUGIN_ROOT, stdio: ['ignore', 'pipe', 'pipe'], timeout: 30000,
+    });
+    process.stderr.write('[vault-sync] auto-build complete.\n');
+  } catch (buildErr) {
+    process.stderr.write(`[vault-sync] auto-build failed: ${buildErr.message}\n`);
+  }
+
+  // Re-check after build attempt
+  if (!existsSync(args[0])) {
+    process.stderr.write(`[vault-sync] script still not found after build: ${args[0]}\n`);
+    process.stderr.write(`[vault-sync] CLAUDE_PLUGIN_ROOT=${process.env.CLAUDE_PLUGIN_ROOT || '(not set)'}\n`);
+    process.stderr.write(`[vault-sync] resolved root=${RESOLVED_PLUGIN_ROOT}\n`);
+    console.log('{}');
+    process.exit(0);
+  }
 }
 
 function collectStdin() {
