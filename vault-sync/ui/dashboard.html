@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vault Sync Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #0d1117; color: #c9d1d9;
+  }
+
+  /* Page Header */
+  .page-header {
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .page-header h1 {
+    font-size: 18px; font-weight: 600; color: #e6edf3;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .health-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #8b949e; display: inline-block;
+  }
+  .health-dot.ok { background: #3fb950; }
+  .health-dot.error { background: #f85149; }
+  .mode-badge {
+    font-size: 12px; padding: 4px 10px; border-radius: 12px; font-weight: 500;
+  }
+  .mode-badge.supercharged { background: #1f6feb33; color: #58a6ff; }
+  .mode-badge.standalone { background: #30363d; color: #8b949e; }
+  .auto-refresh { font-size: 11px; color: #8b949e; }
+
+  /* Dashboard Grid */
+  .dashboard {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 16px; padding: 24px; max-width: 1400px; margin: 0 auto;
+  }
+
+  /* Cards */
+  .card {
+    background: #161b22; border: 1px solid #30363d;
+    border-radius: 8px; overflow: hidden;
+  }
+  .card.span-2 { grid-column: span 2; }
+  .card-header {
+    padding: 14px 18px; border-bottom: 1px solid #30363d;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card-header h2 {
+    font-size: 14px; font-weight: 600; color: #e6edf3;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card-header .icon { font-size: 16px; opacity: 0.7; }
+  .card-header .badge-count {
+    font-size: 12px; color: #d29922;
+  }
+  .card-body { padding: 18px; }
+
+  /* Suggestions */
+  .suggestion {
+    background: #1c2333; border: 1px solid #30363d;
+    border-left: 3px solid #d29922; border-radius: 6px;
+    padding: 14px 16px; margin-bottom: 10px;
+  }
+  .suggestion:last-child { margin-bottom: 0; }
+  .suggestion-title { font-weight: 600; color: #e6edf3; margin-bottom: 6px; font-size: 14px; }
+  .suggestion-content { font-size: 13px; color: #8b949e; line-height: 1.5; }
+  .suggestion-meta {
+    display: flex; gap: 8px; margin-top: 8px; align-items: center; flex-wrap: wrap;
+  }
+  .tag {
+    font-size: 11px; background: #1f6feb22; color: #58a6ff;
+    padding: 2px 8px; border-radius: 10px;
+  }
+  .confidence { font-size: 11px; color: #8b949e; margin-left: auto; }
+  .suggestion-actions {
+    display: flex; gap: 8px; margin-top: 10px;
+  }
+  .btn {
+    font-size: 12px; padding: 5px 14px; border-radius: 6px;
+    border: 1px solid #30363d; cursor: pointer; font-weight: 500;
+    transition: background 0.15s;
+  }
+  .btn-promote {
+    background: #238636; color: #fff; border-color: #2ea043;
+  }
+  .btn-promote:hover { background: #2ea043; }
+  .btn-dismiss {
+    background: transparent; color: #8b949e; border-color: #30363d;
+  }
+  .btn-dismiss:hover { background: #21262d; }
+  .empty-state {
+    text-align: center; padding: 24px; color: #8b949e; font-size: 13px;
+  }
+
+  /* Vault Explorer - Split Panel */
+  .split-layout { display: grid; grid-template-columns: 1fr 1fr; min-height: 400px; }
+  .split-left { border-right: 1px solid #30363d; }
+  .split-left .card-body-inner { padding: 18px; }
+  .split-right { }
+
+  .search-bar { display: flex; gap: 8px; margin-bottom: 14px; }
+  .search-bar input {
+    flex: 1; background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+    padding: 8px 12px; color: #c9d1d9; font-size: 13px; outline: none;
+  }
+  .search-bar input:focus { border-color: #58a6ff; }
+  .filter-chips { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+  .chip {
+    font-size: 11px; padding: 4px 10px; border-radius: 12px; cursor: pointer;
+    border: 1px solid #30363d; color: #8b949e; background: transparent;
+    transition: all 0.15s;
+  }
+  .chip:hover { border-color: #58a6ff; color: #c9d1d9; }
+  .chip.active { background: #1f6feb33; color: #58a6ff; border-color: #1f6feb; }
+  .note-list { max-height: 320px; overflow-y: auto; }
+  .note-item {
+    padding: 10px 14px; border-bottom: 1px solid #21262d; cursor: pointer;
+    transition: background 0.15s;
+  }
+  .note-item:hover { background: #1c2333; }
+  .note-item.active { background: #1c2333; border-left: 3px solid #58a6ff; }
+  .note-item-title { font-size: 13px; font-weight: 600; color: #e6edf3; margin-bottom: 4px; }
+  .note-item-meta { font-size: 11px; color: #8b949e; display: flex; gap: 12px; }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px;
+  }
+  .status-dot.established { background: #3fb950; }
+  .status-dot.exploratory { background: #d29922; }
+
+  /* Detail panel */
+  .detail-panel { padding: 18px; }
+  .detail-panel-title { font-size: 16px; font-weight: 600; color: #e6edf3; margin-bottom: 12px; }
+  .detail-panel-meta {
+    display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: #8b949e;
+    margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #21262d;
+  }
+  .detail-panel-content {
+    font-size: 13px; line-height: 1.7; color: #c9d1d9;
+  }
+  .detail-panel-content p { margin-bottom: 10px; }
+  .detail-panel-content code {
+    background: #1c2333; padding: 2px 6px; border-radius: 3px; font-size: 12px;
+    font-family: 'SF Mono', Monaco, monospace;
+  }
+  .detail-panel-content pre {
+    background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+    padding: 12px; margin: 10px 0; overflow-x: auto;
+  }
+  .detail-panel-content pre code {
+    background: transparent; padding: 0; font-size: 12px;
+  }
+  .detail-panel-content h1,
+  .detail-panel-content h2,
+  .detail-panel-content h3 {
+    color: #e6edf3; margin: 14px 0 8px;
+  }
+  .detail-panel-content h1 { font-size: 18px; }
+  .detail-panel-content h2 { font-size: 16px; }
+  .detail-panel-content h3 { font-size: 14px; }
+  .detail-panel-content ul, .detail-panel-content ol {
+    margin: 8px 0; padding-left: 20px;
+  }
+  .detail-panel-content li { margin-bottom: 4px; }
+  .detail-panel-content strong { color: #e6edf3; }
+  .detail-empty {
+    display: flex; align-items: center; justify-content: center;
+    height: 100%; color: #8b949e; font-size: 13px; padding: 40px;
+  }
+
+  /* Session Timeline */
+  .timeline { position: relative; padding-left: 24px; }
+  .timeline::before {
+    content: ''; position: absolute; left: 8px; top: 4px; bottom: 4px;
+    width: 2px; background: #30363d;
+  }
+  .timeline-entry { position: relative; margin-bottom: 16px; }
+  .timeline-entry:last-child { margin-bottom: 0; }
+  .timeline-entry::before {
+    content: ''; position: absolute; left: -20px; top: 6px;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #30363d; border: 2px solid #161b22;
+  }
+  .timeline-entry.active::before { background: #3fb950; }
+  .timeline-entry.evaluated::before { background: #58a6ff; }
+  .timeline-date { font-size: 11px; color: #8b949e; margin-bottom: 2px; }
+  .timeline-text { font-size: 13px; color: #c9d1d9; }
+  .timeline-detail { font-size: 12px; color: #8b949e; margin-top: 2px; }
+
+  /* Git Status */
+  .git-status-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .git-stat { background: #0d1117; border-radius: 6px; padding: 12px 14px; }
+  .git-stat-label {
+    font-size: 11px; color: #8b949e; text-transform: uppercase;
+    letter-spacing: 0.5px; margin-bottom: 4px;
+  }
+  .git-stat-value { font-size: 15px; font-weight: 600; color: #e6edf3; }
+  .git-stat-value.synced { color: #3fb950; }
+  .git-stat-value.behind { color: #d29922; }
+  .git-stat-value.uncommitted { color: #d29922; }
+
+  /* Hook Status */
+  .hook-list { }
+  .hook-item {
+    display: flex; align-items: center; padding: 8px 0;
+    border-bottom: 1px solid #21262d; font-size: 13px;
+  }
+  .hook-item:last-child { border-bottom: none; }
+  .hook-name {
+    flex: 1; color: #e6edf3;
+    font-family: 'SF Mono', Monaco, monospace; font-size: 12px;
+  }
+  .hook-status { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .hook-status.ok { color: #3fb950; }
+  .hook-status.error { color: #f85149; }
+  .hook-status.pending { color: #8b949e; }
+
+  /* Daemon Health */
+  .health-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .health-stat { text-align: center; padding: 14px; background: #0d1117; border-radius: 6px; }
+  .health-stat-value { font-size: 22px; font-weight: 700; color: #e6edf3; }
+  .health-stat-label {
+    font-size: 11px; color: #8b949e; margin-top: 4px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+
+  /* Observation Pipeline */
+  .pipeline { display: flex; align-items: center; gap: 0; justify-content: center; margin: 12px 0; }
+  .pipeline-stage {
+    background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+    padding: 14px 20px; text-align: center; min-width: 120px;
+  }
+  .pipeline-stage-value { font-size: 20px; font-weight: 700; color: #e6edf3; }
+  .pipeline-stage-label { font-size: 11px; color: #8b949e; margin-top: 4px; }
+  .pipeline-arrow { color: #30363d; font-size: 20px; padding: 0 8px; }
+  .pipeline-subtext {
+    text-align: center; font-size: 12px; color: #8b949e; margin-top: 8px;
+  }
+
+  /* Error overlay */
+  .error-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(13, 17, 23, 0.95);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 12px; z-index: 1000;
+  }
+  .error-overlay h2 { color: #f85149; font-size: 20px; }
+  .error-overlay p { color: #8b949e; font-size: 14px; }
+
+  .section-error {
+    color: #f85149; font-size: 12px; padding: 8px 0;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: #0d1117; }
+  ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #484f58; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="page-header">
+  <h1><span class="health-dot" id="health-dot"></span> Vault Sync Dashboard</h1>
+  <div style="display: flex; align-items: center; gap: 12px;">
+    <span class="mode-badge standalone" id="mode-badge">Standalone Mode</span>
+    <span class="auto-refresh">Auto-refresh: 5s</span>
+  </div>
+</div>
+
+<!-- Dashboard Grid -->
+<div class="dashboard">
+
+  <!-- 1. Pending Suggestions -->
+  <div class="card span-2">
+    <div class="card-header">
+      <h2><span class="icon">&#x1F4A1;</span> Pending Suggestions</h2>
+      <span class="badge-count" id="suggestions-badge"></span>
+    </div>
+    <div class="card-body" id="suggestions-container">
+      <div class="empty-state">No pending suggestions. Suggestions are generated when you end a Claude Code session.</div>
+    </div>
+  </div>
+
+  <!-- 2. Vault Explorer -->
+  <div class="card span-2">
+    <div class="card-header">
+      <h2><span class="icon">&#x1F4DA;</span> Vault Explorer</h2>
+      <span style="font-size: 12px; color: #8b949e;" id="vault-note-count">0 notes</span>
+    </div>
+    <div class="split-layout">
+      <div class="split-left">
+        <div class="card-body-inner">
+          <div class="search-bar">
+            <input type="text" placeholder="Search vault notes..." id="vault-search-input" />
+          </div>
+          <div class="filter-chips" id="vault-filters">
+            <span class="chip active">All</span>
+          </div>
+        </div>
+        <div class="note-list" id="vault-note-list">
+          <div class="empty-state">Loading notes...</div>
+        </div>
+      </div>
+      <div class="split-right">
+        <div id="vault-note-detail">
+          <div class="detail-empty">Select a note to view its content</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Session History -->
+  <div class="card">
+    <div class="card-header">
+      <h2><span class="icon">&#x1F552;</span> Session History</h2>
+    </div>
+    <div class="card-body" id="session-timeline">
+      <div class="empty-state">No session history</div>
+    </div>
+  </div>
+
+  <!-- 4. Vault Sync Status -->
+  <div class="card">
+    <div class="card-header">
+      <h2><span class="icon">&#x1F500;</span> Vault Sync Status</h2>
+    </div>
+    <div class="card-body">
+      <div class="git-status-grid" id="git-status-grid">
+        <div class="git-stat">
+          <div class="git-stat-label">Status</div>
+          <div class="git-stat-value" id="git-sync-status">--</div>
+        </div>
+        <div class="git-stat">
+          <div class="git-stat-label">Last Pull</div>
+          <div class="git-stat-value" id="git-last-pull">--</div>
+        </div>
+        <div class="git-stat">
+          <div class="git-stat-label">Uncommitted</div>
+          <div class="git-stat-value" id="git-uncommitted">--</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Hook Status -->
+  <div class="card">
+    <div class="card-header">
+      <h2><span class="icon">&#x1F517;</span> Hook Status</h2>
+    </div>
+    <div class="card-body">
+      <div class="hook-list" id="hook-status-list">
+        <div class="empty-state">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. Daemon Health -->
+  <div class="card">
+    <div class="card-header">
+      <h2><span class="icon">&#x2764;</span> Daemon Health</h2>
+    </div>
+    <div class="card-body">
+      <div class="health-grid">
+        <div class="health-stat">
+          <div class="health-stat-value" id="health-status">--</div>
+          <div class="health-stat-label">Status</div>
+        </div>
+        <div class="health-stat">
+          <div class="health-stat-value" id="health-uptime">--</div>
+          <div class="health-stat-label">Uptime</div>
+        </div>
+        <div class="health-stat">
+          <div class="health-stat-value" id="health-port">--</div>
+          <div class="health-stat-label">Port</div>
+        </div>
+        <div class="health-stat">
+          <div class="health-stat-value" id="health-pid">--</div>
+          <div class="health-stat-label">PID</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. Observation Pipeline -->
+  <div class="card span-2">
+    <div class="card-header">
+      <h2><span class="icon">&#x1F50D;</span> Observation Pipeline</h2>
+    </div>
+    <div class="card-body">
+      <div class="pipeline">
+        <div class="pipeline-stage">
+          <div class="pipeline-stage-value" id="pipeline-queued">0</div>
+          <div class="pipeline-stage-label">Queued</div>
+        </div>
+        <div class="pipeline-arrow">&rarr;</div>
+        <div class="pipeline-stage">
+          <div class="pipeline-stage-value" id="pipeline-suggestions">0</div>
+          <div class="pipeline-stage-label">Suggestions</div>
+        </div>
+        <div class="pipeline-arrow">&rarr;</div>
+        <div class="pipeline-stage">
+          <div class="pipeline-stage-value" id="pipeline-vault">0</div>
+          <div class="pipeline-stage-label">In Vault</div>
+        </div>
+      </div>
+      <div class="pipeline-subtext">
+        PostToolUse captures &rarr; Stop hook evaluates &rarr; SessionStart presents &rarr; User promotes to vault
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Error overlay (hidden by default) -->
+<div class="error-overlay" id="error-overlay" style="display: none;">
+  <h2>Daemon Not Running</h2>
+  <p>The vault-sync daemon is not responding. Start it with: <code style="background:#1c2333;padding:2px 6px;border-radius:3px;">vault-sync start</code></p>
+  <p style="margin-top: 8px; font-size: 12px;">Retrying every 5 seconds...</p>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // -------------------------------------------------------------------------
+  // API helpers
+  // -------------------------------------------------------------------------
+  var API = '';
+  function api(path) { return fetch(API + path).then(function(r) { return r.json(); }); }
+  function apiPost(path) { return fetch(API + path, { method: 'POST' }).then(function(r) { return r.json(); }); }
+  function apiDelete(path) { return fetch(API + path, { method: 'DELETE' }).then(function(r) { return r.json(); }); }
+
+  // -------------------------------------------------------------------------
+  // Utilities
+  // -------------------------------------------------------------------------
+  function relativeTime(ts) {
+    if (!ts) return 'Never';
+    var diff = Date.now() - ts;
+    if (diff < 60000) return 'Just now';
+    if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+    if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+    return Math.floor(diff / 86400000) + 'd ago';
+  }
+
+  function formatUptime(ms) {
+    if (!ms || ms < 0) return '--';
+    var s = Math.floor(ms / 1000);
+    if (s < 60) return s + 's';
+    if (s < 3600) return Math.floor(s / 60) + 'm';
+    var h = Math.floor(s / 3600);
+    var m = Math.floor((s % 3600) / 60);
+    return h + '.' + Math.floor(m / 6) + 'h';
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function renderMarkdown(md) {
+    if (!md) return '';
+    var html = escapeHtml(md);
+    // Code blocks
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, function(_, lang, code) {
+      return '<pre><code>' + code.trim() + '</code></pre>';
+    });
+    // Inline code
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // Headings
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+    // Bold and italic
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    // List items
+    html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/(<li>[\s\S]*?<\/li>)/g, '<ul>$1</ul>');
+    html = html.replace(/<\/ul>\s*<ul>/g, '');
+    // Paragraphs for remaining plain lines
+    html = html.replace(/^(?!<[huploe\/ ])((?!<).+)$/gm, '<p>$1</p>');
+    html = html.replace(/<p>\s*<\/p>/g, '');
+    return html;
+  }
+
+  function formatDate(ts) {
+    if (!ts) return '';
+    var d = new Date(ts);
+    var now = new Date();
+    var isToday = d.toDateString() === now.toDateString();
+    var yesterday = new Date(now.getTime() - 86400000);
+    var isYesterday = d.toDateString() === yesterday.toDateString();
+    var time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    if (isToday) return 'Today ' + time;
+    if (isYesterday) return 'Yesterday ' + time;
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + time;
+  }
+
+  // -------------------------------------------------------------------------
+  // DOM helpers
+  // -------------------------------------------------------------------------
+  function $(id) { return document.getElementById(id); }
+  function setText(id, text) { $(id).textContent = text; }
+
+  function clearChildren(el) {
+    while (el.firstChild) el.removeChild(el.firstChild);
+  }
+
+  function createElement(tag, attrs, children) {
+    var el = document.createElement(tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function(k) {
+        if (k === 'className') el.className = attrs[k];
+        else if (k === 'onclick') el.addEventListener('click', attrs[k]);
+        else if (k === 'textContent') el.textContent = attrs[k];
+        else if (k === 'style') el.setAttribute('style', attrs[k]);
+        else el.setAttribute(k, attrs[k]);
+      });
+    }
+    if (children) {
+      if (typeof children === 'string') el.textContent = children;
+      else if (Array.isArray(children)) children.forEach(function(c) { if (c) el.appendChild(c); });
+    }
+    return el;
+  }
+
+  // -------------------------------------------------------------------------
+  // State
+  // -------------------------------------------------------------------------
+  var currentFilters = {};
+  var debounceTimer = null;
+  var selectedNotePath = null;
+  var ALL_HOOKS = ['Setup', 'SessionStart', 'PostToolUse', 'UserPromptSubmit', 'Stop', 'SessionEnd'];
+
+  // -------------------------------------------------------------------------
+  // Refresh: Health
+  // -------------------------------------------------------------------------
+  function refreshHealth() {
+    return api('/health').then(function(data) {
+      $('error-overlay').style.display = 'none';
+
+      var dot = $('health-dot');
+      dot.className = 'health-dot ' + (data.status === 'ok' ? 'ok' : 'error');
+
+      var badge = $('mode-badge');
+      if (data.mode === 'supercharged') {
+        badge.textContent = 'Supercharged Mode';
+        badge.className = 'mode-badge supercharged';
+      } else {
+        badge.textContent = 'Standalone Mode';
+        badge.className = 'mode-badge standalone';
+      }
+
+      var statusEl = $('health-status');
+      statusEl.textContent = data.status === 'ok' ? 'OK' : 'Error';
+      statusEl.style.color = data.status === 'ok' ? '#3fb950' : '#f85149';
+      setText('health-uptime', formatUptime(data.uptime));
+      setText('health-port', '37778');
+      setText('health-pid', String(data.pid || '--'));
+      setText('pipeline-queued', String(data.queueDepth || 0));
+    }).catch(function() {
+      $('error-overlay').style.display = 'flex';
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Refresh: Suggestions
+  // -------------------------------------------------------------------------
+  function refreshSuggestions() {
+    return api('/suggestions').then(function(data) {
+      var container = $('suggestions-container');
+      var suggestions = data.suggestions || [];
+
+      setText('pipeline-suggestions', String(suggestions.length));
+
+      clearChildren(container);
+
+      if (suggestions.length === 0) {
+        container.appendChild(createElement('div', { className: 'empty-state' },
+          'No pending suggestions. Suggestions are generated when you end a Claude Code session.'));
+        $('suggestions-badge').textContent = '';
+        return;
+      }
+
+      $('suggestions-badge').textContent = suggestions.length + ' awaiting review';
+
+      suggestions.forEach(function(s, i) {
+        var card = createElement('div', { className: 'suggestion' });
+
+        card.appendChild(createElement('div', { className: 'suggestion-title', textContent: s.title }));
+        card.appendChild(createElement('div', { className: 'suggestion-content', textContent: s.content }));
+
+        var meta = createElement('div', { className: 'suggestion-meta' });
+        (s.tags || []).forEach(function(t) {
+          meta.appendChild(createElement('span', { className: 'tag', textContent: t }));
+        });
+        if (s.confidence != null) {
+          meta.appendChild(createElement('span', { className: 'confidence', textContent: 'Confidence: ' + s.confidence.toFixed(2) }));
+        }
+        card.appendChild(meta);
+
+        var actions = createElement('div', { className: 'suggestion-actions' });
+        actions.appendChild(createElement('button', {
+          className: 'btn btn-promote',
+          textContent: 'Promote',
+          onclick: (function(idx) { return function() { promoteSuggestion(idx); }; })(i)
+        }));
+        actions.appendChild(createElement('button', {
+          className: 'btn btn-dismiss',
+          textContent: 'Dismiss',
+          onclick: (function(idx) { return function() { dismissSuggestion(idx); }; })(i)
+        }));
+        card.appendChild(actions);
+
+        container.appendChild(card);
+      });
+    }).catch(function() {
+      var container = $('suggestions-container');
+      clearChildren(container);
+      container.appendChild(createElement('div', { className: 'section-error', textContent: 'Failed to load suggestions' }));
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Refresh: Vault Notes
+  // -------------------------------------------------------------------------
+  function refreshVaultNotes() {
+    var params = new URLSearchParams();
+    if (currentFilters.status) params.set('status', currentFilters.status);
+    if (currentFilters.tag) params.set('tag', currentFilters.tag);
+    if (currentFilters.q) params.set('q', currentFilters.q);
+    var qs = params.toString();
+
+    return api('/vault/notes' + (qs ? '?' + qs : '')).then(function(data) {
+      var notes = data.notes || [];
+
+      setText('vault-note-count', notes.length + ' note' + (notes.length !== 1 ? 's' : ''));
+      setText('pipeline-vault', String(notes.length));
+
+      // Collect tags for filter chips
+      var allTags = {};
+      notes.forEach(function(n) {
+        (n.tags || []).forEach(function(t) { allTags[t] = true; });
+      });
+      renderFilterChips(Object.keys(allTags));
+
+      // Render note list
+      var list = $('vault-note-list');
+      clearChildren(list);
+
+      if (notes.length === 0) {
+        list.appendChild(createElement('div', { className: 'empty-state', textContent: 'No notes found' }));
+        return;
+      }
+
+      notes.forEach(function(n) {
+        var statusClass = (n.status || 'exploratory').toLowerCase();
+        var isActive = n.path === selectedNotePath;
+
+        var item = createElement('div', {
+          className: 'note-item' + (isActive ? ' active' : ''),
+          onclick: (function(path) { return function() { selectNote(path); }; })(n.path)
+        });
+
+        var titleEl = createElement('div', { className: 'note-item-title' });
+        titleEl.appendChild(createElement('span', { className: 'status-dot ' + statusClass }));
+        titleEl.appendChild(document.createTextNode(' ' + (n.title || n.path)));
+        item.appendChild(titleEl);
+
+        var metaEl = createElement('div', { className: 'note-item-meta' });
+        if (n.tags && n.tags.length) metaEl.appendChild(createElement('span', { textContent: n.tags[0] }));
+        if (n.project) metaEl.appendChild(createElement('span', { textContent: 'project: ' + n.project }));
+        else if (n.branch) metaEl.appendChild(createElement('span', { textContent: 'branch: ' + n.branch }));
+        if (n.created) metaEl.appendChild(createElement('span', { textContent: n.created }));
+        item.appendChild(metaEl);
+
+        list.appendChild(item);
+      });
+    }).catch(function() {
+      var list = $('vault-note-list');
+      clearChildren(list);
+      list.appendChild(createElement('div', { className: 'section-error', textContent: 'Failed to load vault notes' }));
+    });
+  }
+
+  function renderFilterChips(tagList) {
+    var container = $('vault-filters');
+    clearChildren(container);
+
+    var noFilter = !currentFilters.status && !currentFilters.tag;
+
+    container.appendChild(createElement('span', {
+      className: 'chip' + (noFilter ? ' active' : ''),
+      textContent: 'All',
+      onclick: function() { setFilter('', ''); }
+    }));
+
+    container.appendChild(createElement('span', {
+      className: 'chip' + (currentFilters.status === 'established' ? ' active' : ''),
+      onclick: function() { setFilter('status', 'established'); }
+    }, [
+      createElement('span', { className: 'status-dot established' }),
+      document.createTextNode('Established')
+    ]));
+
+    container.appendChild(createElement('span', {
+      className: 'chip' + (currentFilters.status === 'exploratory' ? ' active' : ''),
+      onclick: function() { setFilter('status', 'exploratory'); }
+    }, [
+      createElement('span', { className: 'status-dot exploratory' }),
+      document.createTextNode('Exploratory')
+    ]));
+
+    tagList.forEach(function(t) {
+      container.appendChild(createElement('span', {
+        className: 'chip' + (currentFilters.tag === t ? ' active' : ''),
+        textContent: t,
+        onclick: (function(tag) { return function() { setFilter('tag', tag); }; })(t)
+      }));
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Refresh: Session History
+  // -------------------------------------------------------------------------
+  function refreshSessionHistory() {
+    return api('/session-history').then(function(data) {
+      var sessions = data.sessions || [];
+      var container = $('session-timeline');
+      clearChildren(container);
+
+      if (sessions.length === 0) {
+        container.appendChild(createElement('div', { className: 'empty-state', textContent: 'No session history' }));
+        return;
+      }
+
+      var timeline = createElement('div', { className: 'timeline' });
+
+      sessions.forEach(function(s, i) {
+        var cls = 'timeline-entry';
+        if (i === 0 && !s.endedAt) cls += ' active';
+        else if (s.evaluated) cls += ' evaluated';
+
+        var entry = createElement('div', { className: cls });
+
+        var dateStr = formatDate(s.startedAt) + (s.endedAt ? ' - ' + formatDate(s.endedAt) : ' - now');
+        entry.appendChild(createElement('div', { className: 'timeline-date', textContent: dateStr }));
+
+        var text = !s.endedAt ? 'Current session' : 'Evaluated: ' + (s.observationCount || 0) + ' observations';
+        entry.appendChild(createElement('div', { className: 'timeline-text', textContent: text }));
+
+        if (s.suggestionCount != null) {
+          var detail = s.suggestionCount + ' suggestion' + (s.suggestionCount !== 1 ? 's' : '') + ' generated';
+          entry.appendChild(createElement('div', { className: 'timeline-detail', textContent: detail }));
+        }
+
+        timeline.appendChild(entry);
+      });
+
+      container.appendChild(timeline);
+    }).catch(function() {
+      var container = $('session-timeline');
+      clearChildren(container);
+      container.appendChild(createElement('div', { className: 'section-error', textContent: 'Failed to load session history' }));
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Refresh: Git Status
+  // -------------------------------------------------------------------------
+  function refreshGitStatus() {
+    return api('/vault/git-status').then(function(data) {
+      if (data.error) {
+        setText('git-sync-status', 'N/A');
+        setText('git-last-pull', 'N/A');
+        setText('git-uncommitted', 'N/A');
+        return;
+      }
+
+      var statusEl = $('git-sync-status');
+      var statusMap = { synced: 'In Sync', uncommitted: 'Uncommitted', behind: 'Behind', ahead: 'Ahead' };
+      statusEl.textContent = statusMap[data.syncStatus] || data.syncStatus;
+      statusEl.className = 'git-stat-value ' + (data.syncStatus || '');
+
+      setText('git-last-pull', data.lastPull ? relativeTime(data.lastPull) : 'Never');
+      setText('git-uncommitted', (data.uncommittedCount || 0) + ' file' + (data.uncommittedCount !== 1 ? 's' : ''));
+    }).catch(function() {
+      setText('git-sync-status', 'Error');
+      $('git-sync-status').className = 'git-stat-value';
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Refresh: Hook Status
+  // -------------------------------------------------------------------------
+  function refreshHookStatus() {
+    return api('/hook-status').then(function(data) {
+      var container = $('hook-status-list');
+      clearChildren(container);
+
+      ALL_HOOKS.forEach(function(name) {
+        var info = data[name];
+        var statusClass = 'pending';
+        var statusText = 'Pending';
+        if (info) {
+          if (info.error) {
+            statusClass = 'error';
+            statusText = 'Error: ' + info.error;
+          } else {
+            statusClass = 'ok';
+            statusText = info.lastFired ? relativeTime(info.lastFired) : 'OK';
+          }
+        }
+
+        var item = createElement('div', { className: 'hook-item' });
+        item.appendChild(createElement('span', { className: 'hook-name', textContent: name }));
+        item.appendChild(createElement('span', { className: 'hook-status ' + statusClass, textContent: statusText }));
+        container.appendChild(item);
+      });
+    }).catch(function() {
+      var container = $('hook-status-list');
+      clearChildren(container);
+      container.appendChild(createElement('div', { className: 'section-error', textContent: 'Failed to load hook status' }));
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Refresh All
+  // -------------------------------------------------------------------------
+  function refreshAll() {
+    return Promise.all([
+      refreshHealth(),
+      refreshSuggestions(),
+      refreshVaultNotes(),
+      refreshSessionHistory(),
+      refreshGitStatus(),
+      refreshHookStatus()
+    ]);
+  }
+
+  // -------------------------------------------------------------------------
+  // Event handlers
+  // -------------------------------------------------------------------------
+
+  // Search with debounce
+  $('vault-search-input').addEventListener('input', function(e) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() {
+      currentFilters.q = e.target.value || undefined;
+      refreshVaultNotes();
+    }, 300);
+  });
+
+  // Filter chips
+  function setFilter(type, value) {
+    if (!type) {
+      currentFilters = {};
+      $('vault-search-input').value = '';
+    } else if (currentFilters[type] === value) {
+      delete currentFilters[type];
+    } else {
+      currentFilters[type] = value;
+    }
+    refreshVaultNotes();
+  }
+
+  // Note selection
+  function selectNote(path) {
+    selectedNotePath = path;
+    var detail = $('vault-note-detail');
+    clearChildren(detail);
+    detail.appendChild(createElement('div', { className: 'detail-empty', textContent: 'Loading...' }));
+
+    // Update active state in list
+    var items = document.querySelectorAll('.note-item');
+    items.forEach(function(el) { el.classList.remove('active'); });
+
+    api('/vault/notes/' + encodeURIComponent(path)).then(function(note) {
+      clearChildren(detail);
+
+      if (note.error) {
+        detail.appendChild(createElement('div', { className: 'detail-empty', textContent: note.error }));
+        return;
+      }
+
+      var panel = createElement('div', { className: 'detail-panel' });
+
+      // Title
+      var statusClass = (note.status || 'exploratory').toLowerCase();
+      var titleEl = createElement('div', { className: 'detail-panel-title' });
+      titleEl.appendChild(createElement('span', { className: 'status-dot ' + statusClass }));
+      titleEl.appendChild(document.createTextNode(' ' + (note.title || note.path)));
+      panel.appendChild(titleEl);
+
+      // Meta
+      var metaEl = createElement('div', { className: 'detail-panel-meta' });
+      if (note.status) metaEl.appendChild(createElement('span', { textContent: 'Status: ' + note.status }));
+      (note.tags || []).forEach(function(t) {
+        metaEl.appendChild(createElement('span', { className: 'tag', textContent: t }));
+      });
+      if (note.project) metaEl.appendChild(createElement('span', { textContent: 'Project: ' + note.project }));
+      if (note.branch) metaEl.appendChild(createElement('span', { textContent: 'Branch: ' + note.branch }));
+      if (note.created) metaEl.appendChild(createElement('span', { textContent: note.created }));
+      panel.appendChild(metaEl);
+
+      // Content (rendered markdown) - safe because content comes from our own daemon API
+      var contentEl = createElement('div', { className: 'detail-panel-content' });
+      contentEl.innerHTML = renderMarkdown(note.content || '');
+      panel.appendChild(contentEl);
+
+      detail.appendChild(panel);
+    }).catch(function() {
+      clearChildren(detail);
+      detail.appendChild(createElement('div', { className: 'detail-empty', textContent: 'Failed to load note' }));
+    });
+
+    // Re-highlight the selected item after a tick
+    setTimeout(function() {
+      document.querySelectorAll('.note-item').forEach(function(el) {
+        // Match by checking if this item's click handler uses the same path
+        el.classList.remove('active');
+      });
+      // Find and highlight the right item
+      var noteItems = document.querySelectorAll('.note-item');
+      noteItems.forEach(function(el) {
+        var titleText = el.querySelector('.note-item-title');
+        if (titleText && el.getAttribute('data-path') === path) {
+          el.classList.add('active');
+        }
+      });
+    }, 0);
+  }
+
+  // Promote / Dismiss
+  function promoteSuggestion(index) {
+    apiPost('/suggestions/promote/' + index).then(function() {
+      return Promise.all([refreshSuggestions(), refreshVaultNotes()]);
+    }).catch(function() {
+      window.alert('Failed to promote suggestion');
+    });
+  }
+
+  function dismissSuggestion(index) {
+    apiDelete('/suggestions/' + index).then(function() {
+      return refreshSuggestions();
+    }).catch(function() {
+      window.alert('Failed to dismiss suggestion');
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Auto-refresh
+  // -------------------------------------------------------------------------
+  refreshAll();
+  setInterval(refreshAll, 5000);
+
+})();
+</script>
+
+</body>
+</html>
