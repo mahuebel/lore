@@ -7,6 +7,81 @@ description: Set up the shared knowledge vault - clone repo, configure MCP serve
 
 You are guiding the developer through a one-time setup of their shared knowledge vault. Follow these steps in order.
 
+## Mode Detection
+
+Check the arguments passed to this skill:
+- If `--project` is present → follow the **Per-Project Setup** flow below
+- Otherwise → follow the existing **Global Setup** flow (Steps 1-6 below)
+
+## Per-Project Setup
+
+### Step P1: Gather Project Vault Configuration
+
+Ask the developer for the following, one at a time:
+
+1. **Remote URL** — git remote for the project vault, or "local" for a local-only vault. Default: local.
+2. **Vault path** — where to store the vault on disk. Default: `~/.lore/vaults/<current-repo-name>/`.
+3. **Author** — GitHub username. Default: use git config user.name if available.
+
+Confirm all values before proceeding.
+
+### Step P2: Initialize the Vault
+
+If a remote URL was provided:
+```bash
+git clone <remote-url> <vault-path>
+```
+
+If local-only:
+```bash
+mkdir -p <vault-path> && cd <vault-path> && git init
+```
+
+### Step P3: Create `.lore/config.json`
+
+Write `.lore/config.json` in the current project root:
+
+```json
+{
+  "vault_path": "<vault-path>",
+  "vault_remote": "<remote-url-or-omit>",
+  "author": "<author>"
+}
+```
+
+### Step P4: Ask About MCP Configuration
+
+Ask: "Configure project-scoped MCP for Claude Code, Cursor, both, or neither? (If you have a global vault-mcp registration, 'neither' is fine — dynamic resolution will handle it.)"
+
+If Claude Code: create/update `.mcp.json` with vault-mcp pointing to the project vault.
+If Cursor: create/update `.cursor/mcp.json` similarly.
+If both: create both files.
+
+### Step P5: Ask About .gitignore
+
+Ask: "Should `.lore/` be gitignored? (Yes for solo projects, No for team repos where everyone shares the vault pointer.)"
+
+If yes, add `.lore/` to `.gitignore`.
+
+### Step P6: Verify
+
+Run `vault-query` to confirm the vault is accessible, then print:
+
+```
+Per-project vault configured:
+  Vault: <vault-path>
+  Config: .lore/config.json
+
+Available commands:
+  /vault-note         Create a new note
+  /promote-to-vault   Promote notes after branch merge
+  /vault-cleanup      Discard notes from abandoned branches
+```
+
+---
+
+## Global Setup
+
 ## Step 1: Gather Configuration
 
 Ask the developer for the following, one at a time. Accept defaults where provided:
