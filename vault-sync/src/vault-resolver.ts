@@ -55,7 +55,7 @@ export function resolveVaultForProject(cwd: string): string | null {
   const fallback = join(homedir(), '.lore', 'vault');
   try {
     statSync(fallback);
-    return fallback;
+    return normalizePath(fallback);
   } catch {
     return null;
   }
