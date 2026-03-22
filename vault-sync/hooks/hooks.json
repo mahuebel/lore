@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && _R=$(ls -1d \"$HOME/.claude/plugins/cache/lore/vault-sync\"/[0-9]* 2>/dev/null | sort -V | tail -1); node \"$_R/scripts/smart-install.js\"",
+            "command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && for d in \"$HOME/.claude/plugins/cache/lore/vault-sync\"/[0-9]* \"$HOME/.cursor/plugins/cache/lore/vault-sync\"/*; do [ -f \"$d/scripts/smart-install.js\" ] && _R=\"$d\"; done; [ -z \"$_R\" ] && exit 0; node \"$_R/scripts/smart-install.js\"",
             "timeout": 300
           }
         ]
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && _R=$(ls -1d \"$HOME/.claude/plugins/cache/lore/vault-sync\"/[0-9]* 2>/dev/null | sort -V | tail -1); node \"$_R/scripts/bun-runner.js\" \"$_R/dist/hooks/session-start.cjs\"",
+            "command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && for d in \"$HOME/.claude/plugins/cache/lore/vault-sync\"/[0-9]* \"$HOME/.cursor/plugins/cache/lore/vault-sync\"/*; do [ -f \"$d/scripts/bun-runner.js\" ] && _R=\"$d\"; done; [ -z \"$_R\" ] && exit 0; node \"$_R/scripts/bun-runner.js\" \"$_R/dist/hooks/session-start.cjs\"",
             "timeout": 60
           }
         ]
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && _R=$(ls -1d \"$HOME/.claude/plugins/cache/lore/vault-sync\"/[0-9]* 2>/dev/null | sort -V | tail -1); node \"$_R/scripts/bun-runner.js\" \"$_R/dist/hooks/user-prompt-submit.cjs\"",
+            "command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && for d in \"$HOME/.claude/plugins/cache/lore/vault-sync\"/[0-9]* \"$HOME/.cursor/plugins/cache/lore/vault-sync\"/*; do [ -f \"$d/scripts/bun-runner.js\" ] && _R=\"$d\"; done; [ -z \"$_R\" ] && exit 0; node \"$_R/scripts/bun-runner.js\" \"$_R/dist/hooks/user-prompt-submit.cjs\"",
             "timeout": 5
           }
         ]
@@ -42,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && _R=$(ls -1d \"$HOME/.claude/plugins/cache/lore/vault-sync\"/[0-9]* 2>/dev/null | sort -V | tail -1); node \"$_R/scripts/bun-runner.js\" \"$_R/dist/hooks/post-tool-use.cjs\"",
+            "command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && for d in \"$HOME/.claude/plugins/cache/lore/vault-sync\"/[0-9]* \"$HOME/.cursor/plugins/cache/lore/vault-sync\"/*; do [ -f \"$d/scripts/bun-runner.js\" ] && _R=\"$d\"; done; [ -z \"$_R\" ] && exit 0; node \"$_R/scripts/bun-runner.js\" \"$_R/dist/hooks/post-tool-use.cjs\"",
             "timeout": 30
           }
         ]
@@ -53,7 +53,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && _R=$(ls -1d \"$HOME/.claude/plugins/cache/lore/vault-sync\"/[0-9]* 2>/dev/null | sort -V | tail -1); node \"$_R/scripts/bun-runner.js\" \"$_R/dist/hooks/stop.cjs\"",
+            "command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && for d in \"$HOME/.claude/plugins/cache/lore/vault-sync\"/[0-9]* \"$HOME/.cursor/plugins/cache/lore/vault-sync\"/*; do [ -f \"$d/scripts/bun-runner.js\" ] && _R=\"$d\"; done; [ -z \"$_R\" ] && exit 0; node \"$_R/scripts/bun-runner.js\" \"$_R/dist/hooks/stop.cjs\"",
             "timeout": 120
           }
         ]
@@ -64,7 +64,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && _R=$(ls -1d \"$HOME/.claude/plugins/cache/lore/vault-sync\"/[0-9]* 2>/dev/null | sort -V | tail -1); node \"$_R/scripts/bun-runner.js\" \"$_R/dist/hooks/session-end.cjs\"",
+            "command": "_R=\"${CLAUDE_PLUGIN_ROOT}\"; [ -z \"$_R\" ] && for d in \"$HOME/.claude/plugins/cache/lore/vault-sync\"/[0-9]* \"$HOME/.cursor/plugins/cache/lore/vault-sync\"/*; do [ -f \"$d/scripts/bun-runner.js\" ] && _R=\"$d\"; done; [ -z \"$_R\" ] && exit 0; node \"$_R/scripts/bun-runner.js\" \"$_R/dist/hooks/session-end.cjs\"",
             "timeout": 30
           }
         ]

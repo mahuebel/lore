@@ -16,5 +16,6 @@
   ],
   "agents": [
     "./agents/promoter.md"
-  ]
+  ],
+  "hooks": "./hooks/hooks.json"
 }
