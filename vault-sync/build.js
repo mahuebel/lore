@@ -1,5 +1,5 @@
 import { build } from 'esbuild';
-import { readdirSync } from 'fs';
+import { readdirSync, cpSync, mkdirSync } from 'fs';
 import { join } from 'path';
 
 const hookFiles = readdirSync(join('src', 'hooks'))
@@ -22,5 +22,14 @@ await build({
   banner: { js: '#!/usr/bin/env node' },
   external: ['@anthropic-ai/claude-agent-sdk'],
 });
+
+// Copy dashboard HTML to dist
+mkdirSync(join('dist', 'ui'), { recursive: true });
+try {
+  cpSync(join('ui', 'dashboard.html'), join('dist', 'ui', 'dashboard.html'));
+  console.log('Copied dashboard.html to dist/ui/');
+} catch {
+  console.log('Note: ui/dashboard.html not found, skipping copy');
+}
 
 console.log(`Built ${entryPoints.length} entry points to dist/`);
