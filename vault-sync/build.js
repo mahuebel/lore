@@ -20,7 +20,7 @@ await build({
   target: 'node18',
   outExtension: { '.js': '.cjs' },
   banner: { js: '#!/usr/bin/env node' },
-  external: ['@anthropic-ai/claude-agent-sdk'],
+  // Agent SDK is bundled so it's available in hook child processes
 });
 
 // Copy dashboard HTML to dist
