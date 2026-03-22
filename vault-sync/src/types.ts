@@ -36,3 +36,20 @@ export const SKIP_TOOLS = new Set([
 ]);
 
 export const MAX_INPUT_LENGTH = 2000;
+
+export interface SessionRecord {
+  startedAt: number;
+  endedAt: number;
+  observationCount: number;
+  suggestionCount: number;
+  suggestions: Array<{ title: string; confidence: number }>;
+}
+
+export interface HookHeartbeat {
+  lastFiredAt: number;
+  success: boolean;
+  error?: string;
+}
+
+export const HOOK_STATUS_FILE = `${LORE_DIR}/hook-status.json`;
+export const SESSION_HISTORY_FILE = `${LORE_DIR}/session-history.json`;
