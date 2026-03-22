@@ -163,6 +163,7 @@ export function resolveVaultPath(): string | null {
   const candidates = [
     join(homeDir, '.lore', 'vault'),
     join(homeDir, 'vault'),
+    join(homeDir, 'obsidian', 'team-vault'),
   ];
 
   for (const candidate of candidates) {
