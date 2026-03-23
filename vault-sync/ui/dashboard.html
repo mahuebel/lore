@@ -105,6 +105,58 @@
   .empty-state {
     text-align: center; padding: 24px; color: #8b949e; font-size: 13px;
   }
+  .btn-primary {
+    background: #1f6feb; color: #fff; border-color: #388bfd;
+  }
+  .btn-primary:hover { background: #388bfd; }
+  .btn-show-more {
+    background: transparent; color: #58a6ff; border-color: #30363d;
+    width: 100%; margin-top: 8px;
+  }
+  .btn-show-more:hover { background: #1c2333; }
+
+  /* Vault Setup */
+  .vault-setup {
+    padding: 20px; text-align: center;
+  }
+  .vault-setup p { font-size: 13px; color: #8b949e; margin-bottom: 16px; line-height: 1.6; }
+  .vault-setup-options {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  }
+  .vault-setup-option {
+    background: #0d1117; border: 1px solid #30363d; border-radius: 8px;
+    padding: 16px; text-align: left;
+  }
+  .vault-setup-option h3 {
+    font-size: 14px; font-weight: 600; color: #e6edf3; margin-bottom: 8px;
+  }
+  .vault-setup-option p { font-size: 12px; color: #8b949e; margin-bottom: 12px; }
+  .vault-setup-option .form-row {
+    display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px;
+  }
+  .vault-setup-option label {
+    font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .vault-setup-option input {
+    background: #161b22; border: 1px solid #30363d; border-radius: 6px;
+    padding: 6px 10px; color: #c9d1d9; font-size: 12px; outline: none;
+    font-family: 'SF Mono', Monaco, monospace;
+  }
+  .vault-setup-option input:focus { border-color: #58a6ff; }
+  .vault-setup-option a {
+    color: #58a6ff; text-decoration: none;
+  }
+  .vault-setup-option a:hover { text-decoration: underline; }
+  .vault-setup-option .cmd {
+    background: #161b22; border: 1px solid #30363d; border-radius: 6px;
+    padding: 8px 10px; font-size: 12px; color: #c9d1d9; margin: 8px 0;
+    font-family: 'SF Mono', Monaco, monospace;
+  }
+  .setup-result {
+    font-size: 12px; margin-top: 8px; padding: 8px; border-radius: 6px;
+  }
+  .setup-result.success { background: #23863633; color: #3fb950; }
+  .setup-result.error { background: #f8514933; color: #f85149; }
 
   /* Vault Explorer - Split Panel */
   .split-layout { display: grid; grid-template-columns: 1fr 1fr; min-height: 400px; }
@@ -281,7 +333,51 @@
     <select id="vaultSelector" class="vault-selector" onchange="onVaultChange()">
       <option value="">All Vaults</option>
     </select>
+    <span class="vault-label" id="vault-path-label"></span>
     <span class="auto-refresh">Auto-refresh: 5s</span>
+  </div>
+</div>
+
+<!-- Vault Setup Banner (hidden when vault is configured) -->
+<div id="vault-setup-banner" style="display: none; padding: 16px 24px 0; max-width: 1400px; margin: 0 auto;">
+  <div class="card">
+    <div class="card-header">
+      <h2><span class="icon">&#x1F6E0;</span> Set Up Vault</h2>
+    </div>
+    <div class="vault-setup">
+      <p>No vault is configured for this project. Set up a vault to start capturing team knowledge.<br>
+      Or run <code style="background:#161b22; padding:2px 6px; border-radius:3px; font-size:12px;">/vault-setup --project</code> in Claude Code for a guided setup.</p>
+      <div class="vault-setup-options">
+        <div class="vault-setup-option">
+          <h3>Project Vault</h3>
+          <p>Dedicated vault for this project, stored outside the repo.</p>
+          <div class="form-row">
+            <label>Vault Path</label>
+            <input type="text" id="setup-vault-path" placeholder="~/.lore/vaults/project-name">
+          </div>
+          <div class="form-row">
+            <label>Remote URL (optional)</label>
+            <input type="text" id="setup-vault-remote" placeholder="git@github.com:org/project-vault.git">
+          </div>
+          <div class="form-row">
+            <label>Author</label>
+            <input type="text" id="setup-vault-author" placeholder="your-github-username">
+          </div>
+          <button class="btn btn-primary" onclick="setupProjectVault()">Create Project Vault</button>
+          <div id="setup-project-result"></div>
+        </div>
+        <div class="vault-setup-option">
+          <h3>Global Vault</h3>
+          <p>Shared vault across all projects. Best for teams on related products.</p>
+          <p><strong style="color: #e6edf3;">Step 1:</strong> Create a repo from the template:</p>
+          <p><a href="https://github.com/mahuebel/vault-template" target="_blank" rel="noopener">mahuebel/vault-template</a> &rarr; "Use this template"</p>
+          <p><strong style="color: #e6edf3;">Step 2:</strong> Clone and initialize:</p>
+          <div class="cmd">git clone &lt;your-vault-repo&gt; ~/.lore/vault</div>
+          <p><strong style="color: #e6edf3;">Step 3:</strong> Run in any Claude Code session:</p>
+          <div class="cmd">vault-init --vault_path ~/.lore/vault --author &lt;you&gt;</div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -570,6 +666,8 @@
   var selectedNotePath = null;
   var currentVault = '';
   var ALL_HOOKS = ['Setup', 'SessionStart', 'PostToolUse', 'UserPromptSubmit', 'Stop', 'SessionEnd'];
+  var sessionHistoryLimit = 10;
+  var allSessions = [];
 
   // Vault selector (exposed globally for onchange handler)
   window.onVaultChange = function() {
@@ -596,6 +694,54 @@
   }
 
   // -------------------------------------------------------------------------
+  // Vault Setup
+  // -------------------------------------------------------------------------
+  window.setupProjectVault = function() {
+    var vaultPath = $('setup-vault-path').value.trim();
+    var vaultRemote = $('setup-vault-remote').value.trim();
+    var author = $('setup-vault-author').value.trim();
+    var resultEl = $('setup-project-result');
+
+    if (!vaultPath) {
+      resultEl.className = 'setup-result error';
+      resultEl.textContent = 'Vault path is required';
+      return;
+    }
+
+    resultEl.className = 'setup-result';
+    resultEl.textContent = 'Creating...';
+    resultEl.style.color = '#8b949e';
+
+    apiPost('/vault/init', {
+      vaultPath: vaultPath,
+      vaultRemote: vaultRemote || undefined,
+      author: author || undefined,
+      scope: 'project'
+    }).then(function(data) {
+      if (data.error) {
+        resultEl.className = 'setup-result error';
+        resultEl.textContent = data.error;
+      } else {
+        resultEl.className = 'setup-result success';
+        resultEl.textContent = 'Created! Config written to ' + data.configPath;
+        setTimeout(refreshAll, 1000);
+      }
+    }).catch(function() {
+      resultEl.className = 'setup-result error';
+      resultEl.textContent = 'Failed to create vault';
+    });
+  };
+
+  function loadVaultSetupDefaults() {
+    api('/vault/info').then(function(data) {
+      var pathInput = $('setup-vault-path');
+      if (pathInput && !pathInput.value) {
+        pathInput.value = data.defaultProjectVaultPath.replace(/^\/Users\/[^/]+/, '~');
+      }
+    }).catch(function() {});
+  }
+
+  // -------------------------------------------------------------------------
   // Refresh: Health
   // -------------------------------------------------------------------------
   function refreshHealth() {
@@ -612,6 +758,25 @@
       } else {
         badge.textContent = 'Standalone Mode';
         badge.className = 'mode-badge standalone';
+      }
+
+      // Vault path display
+      var vaultLabel = $('vault-path-label');
+      if (data.vault) {
+        var displayPath = data.vault.path.replace(/^\/Users\/[^/]+/, '~');
+        if (data.vault.isDefault) {
+          vaultLabel.textContent = displayPath;
+          vaultLabel.style.color = '#8b949e';
+        } else {
+          vaultLabel.textContent = displayPath;
+          vaultLabel.style.color = '#58a6ff';
+        }
+        $('vault-setup-banner').style.display = 'none';
+      } else {
+        vaultLabel.textContent = 'No vault configured';
+        vaultLabel.style.color = '#f85149';
+        $('vault-setup-banner').style.display = '';
+        loadVaultSetupDefaults();
       }
 
       var statusEl = $('health-status');
@@ -823,41 +988,62 @@
   // -------------------------------------------------------------------------
   // Refresh: Session History
   // -------------------------------------------------------------------------
-  function refreshSessionHistory() {
-    return api('/session-history').then(function(data) {
-      var sessions = data.sessions || [];
-      var container = $('session-timeline');
-      clearChildren(container);
+  function renderSessionTimeline(sessions, limit) {
+    var container = $('session-timeline');
+    clearChildren(container);
 
-      if (sessions.length === 0) {
-        container.appendChild(createElement('div', { className: 'empty-state', textContent: 'No session history' }));
-        return;
+    if (sessions.length === 0) {
+      container.appendChild(createElement('div', { className: 'empty-state', textContent: 'No session history' }));
+      return;
+    }
+
+    var visible = sessions.slice(0, limit);
+    var timeline = createElement('div', { className: 'timeline' });
+
+    visible.forEach(function(s, i) {
+      var cls = 'timeline-entry';
+      if (i === 0 && !s.endedAt) cls += ' active';
+      else if (s.evaluated) cls += ' evaluated';
+
+      var entry = createElement('div', { className: cls });
+
+      var dateStr = formatDate(s.startedAt) + (s.endedAt ? ' - ' + formatDate(s.endedAt) : ' - now');
+      entry.appendChild(createElement('div', { className: 'timeline-date', textContent: dateStr }));
+
+      var text = !s.endedAt ? 'Current session' : 'Evaluated: ' + (s.observationCount || 0) + ' observations';
+      entry.appendChild(createElement('div', { className: 'timeline-text', textContent: text }));
+
+      if (s.error) {
+        var errDetail = createElement('div', { className: 'timeline-detail', textContent: '\u26a0 ' + s.error });
+        errDetail.style.color = '#f85149';
+        entry.appendChild(errDetail);
+      } else if (s.suggestionCount != null) {
+        var detail = s.suggestionCount + ' suggestion' + (s.suggestionCount !== 1 ? 's' : '') + ' generated';
+        entry.appendChild(createElement('div', { className: 'timeline-detail', textContent: detail }));
       }
 
-      var timeline = createElement('div', { className: 'timeline' });
+      timeline.appendChild(entry);
+    });
 
-      sessions.forEach(function(s, i) {
-        var cls = 'timeline-entry';
-        if (i === 0 && !s.endedAt) cls += ' active';
-        else if (s.evaluated) cls += ' evaluated';
+    container.appendChild(timeline);
 
-        var entry = createElement('div', { className: cls });
-
-        var dateStr = formatDate(s.startedAt) + (s.endedAt ? ' - ' + formatDate(s.endedAt) : ' - now');
-        entry.appendChild(createElement('div', { className: 'timeline-date', textContent: dateStr }));
-
-        var text = !s.endedAt ? 'Current session' : 'Evaluated: ' + (s.observationCount || 0) + ' observations';
-        entry.appendChild(createElement('div', { className: 'timeline-text', textContent: text }));
-
-        if (s.suggestionCount != null) {
-          var detail = s.suggestionCount + ' suggestion' + (s.suggestionCount !== 1 ? 's' : '') + ' generated';
-          entry.appendChild(createElement('div', { className: 'timeline-detail', textContent: detail }));
+    if (sessions.length > limit) {
+      var remaining = sessions.length - limit;
+      container.appendChild(createElement('button', {
+        className: 'btn btn-show-more',
+        textContent: 'Show ' + remaining + ' more session' + (remaining !== 1 ? 's' : ''),
+        onclick: function() {
+          sessionHistoryLimit = sessions.length;
+          renderSessionTimeline(allSessions, sessionHistoryLimit);
         }
+      }));
+    }
+  }
 
-        timeline.appendChild(entry);
-      });
-
-      container.appendChild(timeline);
+  function refreshSessionHistory() {
+    return api('/session-history').then(function(data) {
+      allSessions = data.sessions || [];
+      renderSessionTimeline(allSessions, sessionHistoryLimit);
     }).catch(function() {
       var container = $('session-timeline');
       clearChildren(container);

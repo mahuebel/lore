@@ -1,9 +1,15 @@
 import { type QueuedObservation, type VaultSuggestion } from './types.js';
 
+export interface EvaluationResult {
+  suggestions: VaultSuggestion[];
+  error?: string;
+}
+
 export async function evaluateObservations(
-  observations: QueuedObservation[]
-): Promise<VaultSuggestion[]> {
-  if (observations.length === 0) return [];
+  observations: QueuedObservation[],
+  claudeExecutablePath: string,
+): Promise<EvaluationResult> {
+  if (observations.length === 0) return { suggestions: [] };
 
   const observationsXml = observations
     .map(
@@ -49,16 +55,19 @@ If nothing is vault-worthy, return: []`;
     process.stderr.write(`[vault-sync] SDK loaded, exports: ${Object.keys(sdk).join(', ')}\n`);
     queryFn = sdk.query;
     if (!queryFn) {
-      process.stderr.write(`[vault-sync] sdk.query is ${typeof queryFn} — SDK may have changed API\n`);
+      const msg = `sdk.query is ${typeof queryFn} — SDK may have changed API`;
+      process.stderr.write(`[vault-sync] ${msg}\n`);
+      return { suggestions: [], error: msg };
     }
   } catch (err) {
-    process.stderr.write(`[vault-sync] Agent SDK not available: ${err}\n`);
+    const msg = `Agent SDK not available: ${err}`;
+    process.stderr.write(`[vault-sync] ${msg}\n`);
+    return { suggestions: [], error: msg };
   }
-
-  if (!queryFn) return [];
 
   try {
     const options = {
+      pathToClaudeCodeExecutable: claudeExecutablePath,
       disallowedTools: [
         'Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep',
         'WebFetch', 'WebSearch', 'Agent', 'TodoWrite',
@@ -69,11 +78,27 @@ If nothing is vault-worthy, return: []`;
     process.stderr.write(`[vault-sync] calling sdk.query with ${observations.length} observations...\n`);
     let resultText = '';
     for await (const message of queryFn({ prompt, options })) {
-      process.stderr.write(`[vault-sync] SDK message type: ${message.type}\n`);
+      process.stderr.write(`[vault-sync] SDK message type: ${message.type}, subtype: ${(message as any).subtype ?? 'none'}\n`);
       if (message.type === 'result') {
-        resultText = message.result;
+        if ((message as any).subtype === 'success') {
+          resultText = message.result;
+        } else {
+          // Error result from SDK (error_during_execution, error_max_turns, etc.)
+          const errors = (message as any).errors ?? [];
+          const subtype = (message as any).subtype ?? 'unknown';
+          const msg = `SDK returned ${subtype}: ${errors.join('; ') || 'no details'}`;
+          process.stderr.write(`[vault-sync] ${msg}\n`);
+          return { suggestions: [], error: msg };
+        }
       }
     }
+
+    if (!resultText) {
+      const msg = 'SDK returned no result text (generator yielded no result message)';
+      process.stderr.write(`[vault-sync] ${msg}\n`);
+      return { suggestions: [], error: msg };
+    }
+
     process.stderr.write(`[vault-sync] SDK result (${resultText.length} chars): ${resultText.slice(0, 200)}\n`);
 
     // Strip markdown code fences if present
@@ -89,15 +114,22 @@ If nothing is vault-worthy, return: []`;
       confidence: number;
     }> = JSON.parse(cleaned);
 
-    return parsed.map((item) => ({
-      title: item.title,
-      content: item.content,
-      tags: item.tags,
-      confidence: item.confidence,
-      evaluatedAt: Date.now(),
-    }));
+    return {
+      suggestions: parsed.map((item) => ({
+        title: item.title,
+        content: item.content,
+        tags: item.tags,
+        confidence: item.confidence,
+        evaluatedAt: Date.now(),
+      })),
+    };
   } catch (err) {
-    process.stderr.write(`[vault-sync] evaluation error: ${err}\n`);
-    return [];
+    const errObj = err instanceof Error ? err : new Error(String(err));
+    const msg = `evaluation error: ${errObj.message}`;
+    process.stderr.write(`[vault-sync] ${msg}\n`);
+    if (errObj.stack) {
+      process.stderr.write(`[vault-sync] stack: ${errObj.stack}\n`);
+    }
+    return { suggestions: [], error: msg };
   }
 }

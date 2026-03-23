@@ -84,11 +84,6 @@ async function main() {
     if (suggestions.length > 0) {
       contextLines.push('');
       contextLines.push(formatSuggestions(suggestions));
-
-      // Dismiss shown suggestions
-      await daemonRequest('POST', '/suggestions/dismiss',
-        currentVault ? { vault: currentVault } : undefined
-      );
     }
 
     if (knowledgeNotes.length > 0) {

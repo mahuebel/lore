@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { spawn as cpSpawn, execFileSync } from 'child_process';
-import { readFileSync, writeFileSync, unlinkSync, mkdirSync, existsSync, statSync, renameSync } from 'fs';
+import { readFileSync, writeFileSync, unlinkSync, mkdirSync, existsSync, statSync, renameSync, openSync, appendFileSync } from 'fs';
 import { join } from 'path';
 import {
   type QueuedObservation,
@@ -33,6 +33,17 @@ const state: DaemonState = {
   pendingSuggestions: [],
   startedAt: Date.now(),
 };
+
+/** Resolved path to claude CLI, or null if not installed */
+let claudeExecutablePath: string | null = null;
+
+function resolveClaudeExecutable(): string | null {
+  try {
+    return execFileSync('which', ['claude'], { encoding: 'utf-8' }).trim() || null;
+  } catch {
+    return null;
+  }
+}
 
 interface EvalStatus {
   state: 'idle' | 'evaluating' | 'error';
@@ -101,9 +112,33 @@ function evaluateInBackground(observations: QueuedObservation[]) {
   const primaryCwd = observations.find(o => o.cwd)?.cwd || process.cwd();
   const vaultPath = resolveVaultForProject(primaryCwd) || join(homedir(), '.lore', 'vault');
 
-  evaluateObservations(observations)
-    .then((suggestions) => {
-      evalStatus.state = 'idle';
+  if (!claudeExecutablePath) {
+    evalStatus.state = 'error';
+    evalStatus.completedAt = Date.now();
+    evalStatus.lastError = 'Claude Code CLI not found — install Claude Code to enable evaluation';
+    evalStatus.lastSuggestionCount = 0;
+    const record: SessionRecord = {
+      startedAt: state.startedAt,
+      endedAt: Date.now(),
+      observationCount: observations.length,
+      suggestionCount: 0,
+      suggestions: [],
+      error: evalStatus.lastError,
+    };
+    writeSessionHistory(record);
+    return;
+  }
+
+  evaluateObservations(observations, claudeExecutablePath)
+    .then((result) => {
+      const { suggestions, error } = result;
+
+      if (error) {
+        evalStatus.state = 'error';
+        evalStatus.lastError = error;
+      } else {
+        evalStatus.state = 'idle';
+      }
       evalStatus.completedAt = Date.now();
       evalStatus.lastSuggestionCount = suggestions.length;
 
@@ -113,6 +148,7 @@ function evaluateInBackground(observations: QueuedObservation[]) {
         observationCount: observations.length,
         suggestionCount: suggestions.length,
         suggestions: suggestions.map(s => ({ title: s.title, confidence: s.confidence })),
+        ...(error ? { error } : {}),
       };
       writeSessionHistory(record);
 
@@ -122,6 +158,8 @@ function evaluateInBackground(observations: QueuedObservation[]) {
         existing[vaultPath] = [...vaultSuggestions, ...suggestions];
         writeSuggestionsFile(existing);
         console.error(`[vault-sync] ${suggestions.length} new suggestions saved for ${vaultPath}`);
+      } else if (error) {
+        console.error(`[vault-sync] evaluation failed: ${error}`);
       } else {
         console.error(`[vault-sync] no vault-worthy observations found`);
       }
@@ -138,6 +176,7 @@ function evaluateInBackground(observations: QueuedObservation[]) {
         observationCount: observations.length,
         suggestionCount: 0,
         suggestions: [],
+        error: String(err),
       };
       writeSessionHistory(record);
     });
@@ -179,6 +218,8 @@ app.get('/', (c) => {
 });
 
 app.get('/health', (c) => {
+  const defaultVault = join(homedir(), '.lore', 'vault');
+  const resolvedVault = resolveVaultForProject(process.cwd());
   return c.json({
     status: 'ok',
     mode: state.mode,
@@ -187,6 +228,11 @@ app.get('/health', (c) => {
     queueDepth: state.observations.length,
     pid: process.pid,
     evaluator: evalStatus,
+    claudeCli: claudeExecutablePath ? 'available' : 'not found',
+    vault: resolvedVault ? {
+      path: resolvedVault,
+      isDefault: normalizePath(defaultVault) === resolvedVault,
+    } : null,
   });
 });
 
@@ -361,6 +407,55 @@ app.get('/vault/notes/*', (c) => {
   }
 });
 
+app.get('/vault/info', (c) => {
+  const cwd = process.cwd();
+  const repoName = cwd.split('/').pop() || 'project';
+  const defaultVaultPath = join(homedir(), '.lore', 'vaults', repoName);
+  const globalVaultPath = join(homedir(), '.lore', 'vault');
+  return c.json({
+    cwd,
+    repoName,
+    defaultProjectVaultPath: defaultVaultPath,
+    globalVaultPath,
+    templateRepo: 'https://github.com/mahuebel/vault-template',
+  });
+});
+
+app.post('/vault/init', async (c) => {
+  try {
+    const body = await c.req.json();
+    const { vaultPath, vaultRemote, author, scope } = body as {
+      vaultPath?: string;
+      vaultRemote?: string;
+      author?: string;
+      scope: 'project' | 'global';
+    };
+
+    if (!vaultPath) return c.json({ error: 'vault_path is required' }, 400);
+
+    const resolvedPath = normalizePath(vaultPath);
+
+    // Create the vault directory
+    mkdirSync(resolvedPath, { recursive: true });
+
+    if (scope === 'project') {
+      // Write .lore/config.json in cwd
+      const configDir = join(process.cwd(), '.lore');
+      mkdirSync(configDir, { recursive: true });
+      const config: Record<string, string> = { vault_path: vaultPath };
+      if (vaultRemote) config.vault_remote = vaultRemote;
+      if (author) config.author = author;
+      writeFileSync(join(configDir, 'config.json'), JSON.stringify(config, null, 2) + '\n');
+      return c.json({ ok: true, scope: 'project', configPath: join(configDir, 'config.json'), vaultPath: resolvedPath });
+    } else {
+      // Global: just ensure ~/.lore/vault exists
+      return c.json({ ok: true, scope: 'global', vaultPath: resolvedPath });
+    }
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
 app.get('/vault/git-status', (c) => {
   try {
     const vaultPath = resolveVaultFromQuery(c);
@@ -474,10 +569,12 @@ async function cmdStart(): Promise<void> {
     }
   }
 
-  // Spawn detached child running "serve"
+  // Spawn detached child running "serve", logging stderr to file
+  const logFile = join(LORE_DIR, 'daemon.log');
+  const logFd = openSync(logFile, 'a');
   const child = cpSpawn(process.argv[0], [process.argv[1], 'serve'], {
     detached: true,
-    stdio: 'ignore',
+    stdio: ['ignore', 'ignore', logFd],
   });
   child.unref();
 
@@ -508,6 +605,13 @@ async function cmdServe(): Promise<void> {
 
   state.mode = await detectClaudeMem();
   state.startedAt = Date.now();
+
+  claudeExecutablePath = resolveClaudeExecutable();
+  if (claudeExecutablePath) {
+    console.error(`[vault-sync] claude CLI found at ${claudeExecutablePath}`);
+  } else {
+    console.error(`[vault-sync] claude CLI not found — evaluation disabled`);
+  }
 
   console.error(`[vault-sync] serving on port ${DAEMON_PORT} (mode: ${state.mode})`);
 

@@ -46,6 +46,7 @@ export interface SessionRecord {
   observationCount: number;
   suggestionCount: number;
   suggestions: Array<{ title: string; confidence: number }>;
+  error?: string;
 }
 
 export interface HookHeartbeat {

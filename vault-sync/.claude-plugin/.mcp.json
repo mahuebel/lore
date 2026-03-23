@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "vault-mcp": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["lore-vault-mcp"]
+    }
+  }
+}
