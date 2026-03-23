@@ -110,6 +110,20 @@ function resolveVaultFromQuery(c: any): string | null {
   return resolveVaultForProject(process.cwd());
 }
 
+const AUTO_PROMOTE_THRESHOLD = 0.75;
+
+function promoteToVault(suggestion: VaultSuggestion, vaultPath: string): string {
+  const slug = suggestion.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80);
+  const filename = `${slug}.md`;
+  const filePath = join(vaultPath, filename);
+  const now = new Date().toISOString().split('T')[0];
+  const tagsYaml = suggestion.tags.length > 0 ? `tags: [${suggestion.tags.join(', ')}]` : 'tags: []';
+  const noteContent = `---\ntitle: "${suggestion.title}"\nstatus: exploratory\n${tagsYaml}\nbranch: main\ncreated: ${now}\n---\n\n${suggestion.content}\n`;
+  mkdirSync(vaultPath, { recursive: true });
+  writeFileSync(filePath, noteContent);
+  return filename;
+}
+
 function evaluateInBackground(observations: QueuedObservation[]) {
   evalStatus.state = 'evaluating';
   evalStatus.observationCount = observations.length;
@@ -160,11 +174,32 @@ function evaluateInBackground(observations: QueuedObservation[]) {
       writeSessionHistory(record);
 
       if (suggestions.length > 0) {
-        const existing = readSuggestionsFile();
-        const vaultSuggestions = existing[vaultPath] || [];
-        existing[vaultPath] = [...vaultSuggestions, ...suggestions];
-        writeSuggestionsFile(existing);
-        console.error(`[vault-sync] ${suggestions.length} new suggestions saved for ${vaultPath}`);
+        const autoPromoted: VaultSuggestion[] = [];
+        const pending: VaultSuggestion[] = [];
+
+        for (const s of suggestions) {
+          if (s.confidence >= AUTO_PROMOTE_THRESHOLD) {
+            try {
+              const file = promoteToVault(s, vaultPath);
+              autoPromoted.push(s);
+              console.error(`[vault-sync] auto-promoted (${s.confidence}): ${file}`);
+            } catch (err) {
+              console.error(`[vault-sync] auto-promote failed: ${err}`);
+              pending.push(s);
+            }
+          } else {
+            pending.push(s);
+          }
+        }
+
+        if (pending.length > 0) {
+          const existing = readSuggestionsFile();
+          const vaultSuggestions = existing[vaultPath] || [];
+          existing[vaultPath] = [...vaultSuggestions, ...pending];
+          writeSuggestionsFile(existing);
+        }
+
+        console.error(`[vault-sync] ${autoPromoted.length} auto-promoted, ${pending.length} pending for ${vaultPath}`);
       } else if (error) {
         console.error(`[vault-sync] evaluation failed: ${error}`);
       } else {
@@ -365,16 +400,7 @@ app.post('/suggestions/promote/:index', async (c) => {
     if (index < 0 || index >= suggestions.length) return c.json({ error: 'Index out of range' }, 404);
 
     const suggestion = suggestions[index];
-    const vaultPath = key;
-
-    const slug = suggestion.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80);
-    const filename = `${slug}.md`;
-    const filePath = join(vaultPath, filename);
-    const now = new Date().toISOString().split('T')[0];
-    const tagsYaml = suggestion.tags.length > 0 ? `tags: [${suggestion.tags.join(', ')}]` : 'tags: []';
-    const noteContent = `---\ntitle: "${suggestion.title}"\nstatus: exploratory\n${tagsYaml}\nbranch: main\ncreated: ${now}\n---\n\n${suggestion.content}\n`;
-
-    writeFileSync(filePath, noteContent);
+    const filename = promoteToVault(suggestion, key);
 
     suggestions.splice(index, 1);
     if (suggestions.length === 0) delete all[key];

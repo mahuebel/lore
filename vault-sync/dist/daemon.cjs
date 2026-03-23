@@ -15570,8 +15570,8 @@ function collectMdFiles(dir, relBase = "", depth = 0) {
   }
   return results;
 }
-function listVaultNotes(vaultPath, filters) {
-  const files = collectMdFiles(vaultPath);
+function listVaultNotes(vaultPath2, filters) {
+  const files = collectMdFiles(vaultPath2);
   const notes = [];
   for (const { fullPath, relPath } of files) {
     let content;
@@ -15604,9 +15604,9 @@ function listVaultNotes(vaultPath, filters) {
   }
   return notes;
 }
-function readVaultNote(vaultPath, notePath) {
+function readVaultNote(vaultPath2, notePath) {
   try {
-    const fullPath = (0, import_path10.join)(vaultPath, notePath);
+    const fullPath = (0, import_path10.join)(vaultPath2, notePath);
     const content = (0, import_fs3.readFileSync)(fullPath, "utf-8");
     const parsed = parseFrontmatter(content);
     return {
@@ -15739,13 +15739,34 @@ function resolveVaultFromQuery(c2) {
   if (vaultParam) return normalizePath(vaultParam);
   return resolveVaultForProject(process.cwd());
 }
+var AUTO_PROMOTE_THRESHOLD = 0.75;
+function promoteToVault(suggestion, vaultPath2) {
+  const slug = suggestion.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
+  const filename = `${slug}.md`;
+  const filePath = (0, import_path11.join)(vaultPath2, filename);
+  const now = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+  const tagsYaml = suggestion.tags.length > 0 ? `tags: [${suggestion.tags.join(", ")}]` : "tags: []";
+  const noteContent = `---
+title: "${suggestion.title}"
+status: exploratory
+${tagsYaml}
+branch: main
+created: ${now}
+---
+
+${suggestion.content}
+`;
+  (0, import_fs4.mkdirSync)(vaultPath2, { recursive: true });
+  (0, import_fs4.writeFileSync)(filePath, noteContent);
+  return filename;
+}
 function evaluateInBackground(observations) {
   evalStatus.state = "evaluating";
   evalStatus.observationCount = observations.length;
   evalStatus.startedAt = Date.now();
   evalStatus.lastError = null;
   const primaryCwd = observations.find((o2) => o2.cwd)?.cwd || process.cwd();
-  const vaultPath = resolveVaultForProject(primaryCwd) || (0, import_path11.join)((0, import_node_os2.homedir)(), ".lore", "vault");
+  const vaultPath2 = resolveVaultForProject(primaryCwd) || (0, import_path11.join)((0, import_node_os2.homedir)(), ".lore", "vault");
   if (!claudeExecutablePath) {
     evalStatus.state = "error";
     evalStatus.completedAt = Date.now();
@@ -15782,11 +15803,29 @@ function evaluateInBackground(observations) {
     };
     writeSessionHistory(record);
     if (suggestions.length > 0) {
-      const existing = readSuggestionsFile();
-      const vaultSuggestions = existing[vaultPath] || [];
-      existing[vaultPath] = [...vaultSuggestions, ...suggestions];
-      writeSuggestionsFile(existing);
-      console.error(`[vault-sync] ${suggestions.length} new suggestions saved for ${vaultPath}`);
+      const autoPromoted = [];
+      const pending = [];
+      for (const s2 of suggestions) {
+        if (s2.confidence >= AUTO_PROMOTE_THRESHOLD) {
+          try {
+            const file = promoteToVault(s2, vaultPath2);
+            autoPromoted.push(s2);
+            console.error(`[vault-sync] auto-promoted (${s2.confidence}): ${file}`);
+          } catch (err) {
+            console.error(`[vault-sync] auto-promote failed: ${err}`);
+            pending.push(s2);
+          }
+        } else {
+          pending.push(s2);
+        }
+      }
+      if (pending.length > 0) {
+        const existing = readSuggestionsFile();
+        const vaultSuggestions = existing[vaultPath2] || [];
+        existing[vaultPath2] = [...vaultSuggestions, ...pending];
+        writeSuggestionsFile(existing);
+      }
+      console.error(`[vault-sync] ${autoPromoted.length} auto-promoted, ${pending.length} pending for ${vaultPath2}`);
     } else if (error) {
       console.error(`[vault-sync] evaluation failed: ${error}`);
     } else {
@@ -15963,23 +16002,7 @@ app.post("/suggestions/promote/:index", async (c2) => {
     const suggestions = all[key];
     if (index < 0 || index >= suggestions.length) return c2.json({ error: "Index out of range" }, 404);
     const suggestion = suggestions[index];
-    const vaultPath = key;
-    const slug = suggestion.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
-    const filename = `${slug}.md`;
-    const filePath = (0, import_path11.join)(vaultPath, filename);
-    const now = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
-    const tagsYaml = suggestion.tags.length > 0 ? `tags: [${suggestion.tags.join(", ")}]` : "tags: []";
-    const noteContent = `---
-title: "${suggestion.title}"
-status: exploratory
-${tagsYaml}
-branch: main
-created: ${now}
----
-
-${suggestion.content}
-`;
-    (0, import_fs4.writeFileSync)(filePath, noteContent);
+    const filename = promoteToVault(suggestion, key);
     suggestions.splice(index, 1);
     if (suggestions.length === 0) delete all[key];
     writeSuggestionsFile(all);
@@ -15990,8 +16013,8 @@ ${suggestion.content}
 });
 app.get("/vault/notes", (c2) => {
   try {
-    const vaultPath = resolveVaultFromQuery(c2);
-    if (!vaultPath) return c2.json({ notes: [], error: "Vault not configured" });
+    const vaultPath2 = resolveVaultFromQuery(c2);
+    if (!vaultPath2) return c2.json({ notes: [], error: "Vault not configured" });
     const filters = {
       status: c2.req.query("status") || void 0,
       tag: c2.req.query("tag") || void 0,
@@ -15999,7 +16022,7 @@ app.get("/vault/notes", (c2) => {
       branch: c2.req.query("branch") || void 0,
       q: c2.req.query("q") || void 0
     };
-    const notes = listVaultNotes(vaultPath, filters);
+    const notes = listVaultNotes(vaultPath2, filters);
     return c2.json({ notes });
   } catch {
     return c2.json({ notes: [], error: "Failed to read vault" });
@@ -16009,9 +16032,9 @@ app.get("/vault/notes/*", (c2) => {
   try {
     const notePath = c2.req.path.replace("/vault/notes/", "");
     if (!notePath) return c2.json({ error: "Path required" }, 400);
-    const vaultPath = resolveVaultFromQuery(c2);
-    if (!vaultPath) return c2.json({ error: "Vault not configured" }, 500);
-    const note = readVaultNote(vaultPath, decodeURIComponent(notePath));
+    const vaultPath2 = resolveVaultFromQuery(c2);
+    if (!vaultPath2) return c2.json({ error: "Vault not configured" }, 500);
+    const note = readVaultNote(vaultPath2, decodeURIComponent(notePath));
     if (!note) return c2.json({ error: "Note not found" }, 404);
     return c2.json(note);
   } catch {
@@ -16034,14 +16057,14 @@ app.get("/vault/info", (c2) => {
 app.post("/vault/init", async (c2) => {
   try {
     const body = await c2.req.json();
-    const { vaultPath, vaultRemote, author, scope } = body;
-    if (!vaultPath) return c2.json({ error: "vault_path is required" }, 400);
-    const resolvedPath = normalizePath(vaultPath);
+    const { vaultPath: vaultPath2, vaultRemote, author, scope } = body;
+    if (!vaultPath2) return c2.json({ error: "vault_path is required" }, 400);
+    const resolvedPath = normalizePath(vaultPath2);
     (0, import_fs4.mkdirSync)(resolvedPath, { recursive: true });
     if (scope === "project") {
       const configDir = (0, import_path11.join)(process.cwd(), ".lore");
       (0, import_fs4.mkdirSync)(configDir, { recursive: true });
-      const config = { vault_path: vaultPath };
+      const config = { vault_path: vaultPath2 };
       if (vaultRemote) config.vault_remote = vaultRemote;
       if (author) config.author = author;
       (0, import_fs4.writeFileSync)((0, import_path11.join)(configDir, "config.json"), JSON.stringify(config, null, 2) + "\n");
@@ -16055,11 +16078,11 @@ app.post("/vault/init", async (c2) => {
 });
 app.get("/vault/git-status", (c2) => {
   try {
-    const vaultPath = resolveVaultFromQuery(c2);
-    if (!vaultPath) return c2.json({ error: "Vault not configured" }, 500);
+    const vaultPath2 = resolveVaultFromQuery(c2);
+    if (!vaultPath2) return c2.json({ error: "Vault not configured" }, 500);
     const run = (cmd, args) => {
       try {
-        return (0, import_child_process3.execFileSync)(cmd, args, { cwd: vaultPath, timeout: 5e3, encoding: "utf-8" }).trim();
+        return (0, import_child_process3.execFileSync)(cmd, args, { cwd: vaultPath2, timeout: 5e3, encoding: "utf-8" }).trim();
       } catch {
         return "";
       }
@@ -16068,7 +16091,7 @@ app.get("/vault/git-status", (c2) => {
     const uncommittedCount = status ? status.split("\n").filter(Boolean).length : 0;
     let lastPull = null;
     try {
-      const fetchHead = (0, import_path11.join)(vaultPath, ".git", "FETCH_HEAD");
+      const fetchHead = (0, import_path11.join)(vaultPath2, ".git", "FETCH_HEAD");
       lastPull = (0, import_fs4.statSync)(fetchHead).mtimeMs;
     } catch {
     }
