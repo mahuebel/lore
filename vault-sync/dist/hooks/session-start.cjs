@@ -179,7 +179,7 @@ async function main() {
     await readStdin();
     let health = await daemonRequest("GET", "/health");
     const expectedVersion = getPluginVersion();
-    const needsRestart = !health || health.version && health.version !== expectedVersion;
+    const needsRestart = !health || (health.version || "unknown") !== expectedVersion;
     if (needsRestart) {
       if (health) {
         try {

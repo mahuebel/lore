@@ -58,7 +58,7 @@ async function main() {
     let health = await daemonRequest('GET', '/health');
 
     const expectedVersion = getPluginVersion();
-    const needsRestart = !health || (health.version && health.version !== expectedVersion);
+    const needsRestart = !health || (health.version || 'unknown') !== expectedVersion;
 
     if (needsRestart) {
       // Stop old daemon if it's running with wrong version

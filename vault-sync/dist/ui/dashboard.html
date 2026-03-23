@@ -484,8 +484,8 @@
           <div class="health-stat-label">Uptime</div>
         </div>
         <div class="health-stat">
-          <div class="health-stat-value" id="health-port">--</div>
-          <div class="health-stat-label">Port</div>
+          <div class="health-stat-value" id="health-version">--</div>
+          <div class="health-stat-label">Version</div>
         </div>
         <div class="health-stat">
           <div class="health-stat-value" id="health-pid">--</div>
@@ -783,7 +783,7 @@
       statusEl.textContent = data.status === 'ok' ? 'OK' : 'Error';
       statusEl.style.color = data.status === 'ok' ? '#3fb950' : '#f85149';
       setText('health-uptime', formatUptime(data.uptime));
-      setText('health-port', '37778');
+      setText('health-version', data.version || '--');
       setText('health-pid', String(data.pid || '--'));
       setText('pipeline-queued', String(data.queueDepth || 0));
 
