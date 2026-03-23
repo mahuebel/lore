@@ -1,14 +1,5 @@
 {
   "name": "vault-sync",
-  "version": "3.4.1",
-  "description": "Shared Obsidian knowledge vault with git sync, observation capture, and automatic context injection",
-  "skills": [
-    "./skills/setup/SKILL.md",
-    "./skills/promote/SKILL.md",
-    "./skills/cleanup/SKILL.md",
-    "./skills/vault-note/SKILL.md"
-  ],
-  "agents": [
-    "./agents/promoter.md"
-  ]
+  "version": "3.4.2",
+  "description": "Shared Obsidian knowledge vault with git sync, observation capture, and automatic context injection"
 }
