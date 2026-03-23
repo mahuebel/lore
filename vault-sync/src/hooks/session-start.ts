@@ -1,5 +1,4 @@
 import * as path from 'node:path';
-import * as fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { readStdin, daemonRequest, output } from './utils.js';
 import { writeHookStatus } from '../hook-heartbeat.js';
@@ -7,13 +6,9 @@ import { resolveVaultForProject } from '../vault-resolver.js';
 
 const RESOLVED_PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
 
+declare const __PLUGIN_VERSION__: string;
 function getPluginVersion(): string {
-  try {
-    const pkgPath = path.join(RESOLVED_PLUGIN_ROOT, 'package.json');
-    return JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).version || 'unknown';
-  } catch {
-    return 'unknown';
-  }
+  return typeof __PLUGIN_VERSION__ !== 'undefined' ? __PLUGIN_VERSION__ : 'unknown';
 }
 
 interface Suggestion {

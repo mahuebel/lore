@@ -15682,12 +15682,7 @@ var state = {
   pendingSuggestions: [],
   startedAt: Date.now()
 };
-var pluginVersion = "unknown";
-try {
-  const pkgPath = (0, import_path11.join)(__dirname, "..", "package.json");
-  pluginVersion = JSON.parse((0, import_fs4.readFileSync)(pkgPath, "utf-8")).version || "unknown";
-} catch {
-}
+var pluginVersion = true ? "3.4.8" : "unknown";
 var claudeExecutablePath = null;
 function resolveClaudeExecutable() {
   try {

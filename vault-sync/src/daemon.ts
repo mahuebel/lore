@@ -34,12 +34,8 @@ const state: DaemonState = {
   startedAt: Date.now(),
 };
 
-/** Plugin version, read from package.json */
-let pluginVersion = 'unknown';
-try {
-  const pkgPath = join(__dirname, '..', 'package.json');
-  pluginVersion = JSON.parse(readFileSync(pkgPath, 'utf-8')).version || 'unknown';
-} catch {}
+declare const __PLUGIN_VERSION__: string;
+const pluginVersion: string = typeof __PLUGIN_VERSION__ !== 'undefined' ? __PLUGIN_VERSION__ : 'unknown';
 
 /** Resolved path to claude CLI, or null if not installed */
 let claudeExecutablePath: string | null = null;

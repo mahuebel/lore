@@ -1,6 +1,8 @@
 import { build } from 'esbuild';
-import { readdirSync, cpSync, mkdirSync } from 'fs';
+import { readdirSync, readFileSync, cpSync, mkdirSync } from 'fs';
 import { join } from 'path';
+
+const pkg = JSON.parse(readFileSync('package.json', 'utf-8'));
 
 const hookFiles = readdirSync(join('src', 'hooks'))
   .filter(f => f.endsWith('.ts'))
@@ -20,6 +22,9 @@ await build({
   target: 'node18',
   outExtension: { '.js': '.cjs' },
   banner: { js: '#!/usr/bin/env node' },
+  define: {
+    '__PLUGIN_VERSION__': JSON.stringify(pkg.version),
+  },
   // Agent SDK is bundled so it's available in hook child processes
 });
 

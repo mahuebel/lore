@@ -25,7 +25,6 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 
 // src/hooks/session-start.ts
 var path = __toESM(require("node:path"), 1);
-var fs = __toESM(require("node:fs"), 1);
 var import_node_child_process = require("node:child_process");
 
 // src/hooks/utils.ts
@@ -150,12 +149,7 @@ function resolveVaultForProject(cwd) {
 // src/hooks/session-start.ts
 var RESOLVED_PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, "..", "..");
 function getPluginVersion() {
-  try {
-    const pkgPath = path.join(RESOLVED_PLUGIN_ROOT, "package.json");
-    return JSON.parse(fs.readFileSync(pkgPath, "utf-8")).version || "unknown";
-  } catch {
-    return "unknown";
-  }
+  return true ? "3.4.8" : "unknown";
 }
 function formatSuggestions(suggestions) {
   const lines = [
