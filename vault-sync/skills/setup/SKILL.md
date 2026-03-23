@@ -1,6 +1,7 @@
 ---
 name: vault-setup
 description: Set up a shared knowledge vault (global or per-project) - clone repo, create config, configure MCP server, verify connection
+command: vault-setup
 ---
 
 # /vault-setup — Set Up the Shared Knowledge Vault
