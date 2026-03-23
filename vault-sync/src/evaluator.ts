@@ -68,6 +68,7 @@ If nothing is vault-worthy, return: []`;
   try {
     const options = {
       pathToClaudeCodeExecutable: claudeExecutablePath,
+      persistSession: false,
       disallowedTools: [
         'Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep',
         'WebFetch', 'WebSearch', 'Agent', 'TodoWrite',

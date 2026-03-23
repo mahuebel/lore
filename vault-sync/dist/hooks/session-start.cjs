@@ -149,7 +149,7 @@ function resolveVaultForProject(cwd) {
 // src/hooks/session-start.ts
 var RESOLVED_PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, "..", "..");
 function getPluginVersion() {
-  return true ? "3.4.8" : "unknown";
+  return true ? "3.4.9" : "unknown";
 }
 function formatSuggestions(suggestions) {
   const lines = [
