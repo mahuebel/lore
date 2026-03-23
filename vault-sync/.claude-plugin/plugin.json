@@ -1,5 +1,5 @@
 {
   "name": "vault-sync",
-  "version": "3.4.4",
+  "version": "3.4.5",
   "description": "Shared Obsidian knowledge vault with git sync, observation capture, and automatic context injection"
 }

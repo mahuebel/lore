@@ -1,10 +1,20 @@
 import * as path from 'node:path';
+import * as fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { readStdin, daemonRequest, output } from './utils.js';
 import { writeHookStatus } from '../hook-heartbeat.js';
 import { resolveVaultForProject } from '../vault-resolver.js';
 
 const RESOLVED_PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
+
+function getPluginVersion(): string {
+  try {
+    const pkgPath = path.join(RESOLVED_PLUGIN_ROOT, 'package.json');
+    return JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).version || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
 
 interface Suggestion {
   title: string;
@@ -45,18 +55,32 @@ async function main() {
     await readStdin();
 
     // Check daemon health
-    const health = await daemonRequest('GET', '/health');
+    let health = await daemonRequest('GET', '/health');
 
-    // If daemon not running, try to start it
-    if (!health) {
+    const expectedVersion = getPluginVersion();
+    const needsRestart = !health || (health.version && health.version !== expectedVersion);
+
+    if (needsRestart) {
+      // Stop old daemon if it's running with wrong version
+      if (health) {
+        try {
+          const daemonScript = path.join(RESOLVED_PLUGIN_ROOT, 'dist', 'daemon.cjs');
+          execFileSync('node', [daemonScript, 'stop'], {
+            timeout: 5000,
+            stdio: 'ignore',
+          });
+        } catch {}
+      }
+
+      // Start daemon
       try {
         const daemonScript = path.join(RESOLVED_PLUGIN_ROOT, 'dist', 'daemon.cjs');
         execFileSync('node', [daemonScript, 'start'], {
           timeout: 15000,
           stdio: 'ignore',
         });
+        health = await daemonRequest('GET', '/health');
       } catch {
-        // Failed to start daemon, continue silently
         process.stderr.write('vault-sync: failed to start daemon\n');
       }
     }

@@ -15682,6 +15682,12 @@ var state = {
   pendingSuggestions: [],
   startedAt: Date.now()
 };
+var pluginVersion = "unknown";
+try {
+  const pkgPath = (0, import_path11.join)(__dirname, "..", "package.json");
+  pluginVersion = JSON.parse((0, import_fs4.readFileSync)(pkgPath, "utf-8")).version || "unknown";
+} catch {
+}
 var claudeExecutablePath = null;
 function resolveClaudeExecutable() {
   try {
@@ -15837,6 +15843,7 @@ app.get("/health", (c2) => {
   const resolvedVault = resolveVaultForProject(process.cwd());
   return c2.json({
     status: "ok",
+    version: pluginVersion,
     mode: state.mode,
     uptime: Date.now() - state.startedAt,
     startedAt: state.startedAt,
@@ -15901,7 +15908,9 @@ app.get("/suggestions", (c2) => {
     const key = normalizePath(vaultParam);
     return c2.json({ suggestions: all[key] || [] });
   }
-  const flat = Object.values(all).flat();
+  const flat = Object.entries(all).flatMap(
+    ([vault, items]) => items.map((s2) => ({ ...s2, vault }))
+  );
   return c2.json({ suggestions: flat, vaults: all });
 });
 app.post("/suggestions/dismiss", async (c2) => {

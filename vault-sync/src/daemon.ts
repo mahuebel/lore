@@ -34,6 +34,13 @@ const state: DaemonState = {
   startedAt: Date.now(),
 };
 
+/** Plugin version, read from package.json */
+let pluginVersion = 'unknown';
+try {
+  const pkgPath = join(__dirname, '..', 'package.json');
+  pluginVersion = JSON.parse(readFileSync(pkgPath, 'utf-8')).version || 'unknown';
+} catch {}
+
 /** Resolved path to claude CLI, or null if not installed */
 let claudeExecutablePath: string | null = null;
 
@@ -222,6 +229,7 @@ app.get('/health', (c) => {
   const resolvedVault = resolveVaultForProject(process.cwd());
   return c.json({
     status: 'ok',
+    version: pluginVersion,
     mode: state.mode,
     uptime: Date.now() - state.startedAt,
     startedAt: state.startedAt,
@@ -298,7 +306,9 @@ app.get('/suggestions', (c) => {
     const key = normalizePath(vaultParam);
     return c.json({ suggestions: all[key] || [] });
   }
-  const flat = Object.values(all).flat();
+  const flat = Object.entries(all).flatMap(([vault, items]) =>
+    items.map(s => ({ ...s, vault }))
+  );
   return c.json({ suggestions: flat, vaults: all });
 });
 
