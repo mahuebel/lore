@@ -848,7 +848,9 @@
         var card = createElement('div', { className: 'suggestion' });
 
         card.appendChild(createElement('div', { className: 'suggestion-title', textContent: s.title }));
-        card.appendChild(createElement('div', { className: 'suggestion-content', textContent: s.content }));
+        var contentDiv = createElement('div', { className: 'suggestion-content' });
+        contentDiv.innerHTML = renderMarkdown(s.content || '');
+        card.appendChild(contentDiv);
 
         var meta = createElement('div', { className: 'suggestion-meta' });
         // Show vault label when viewing all vaults
@@ -1020,6 +1022,18 @@
       } else if (s.suggestionCount != null) {
         var detail = s.suggestionCount + ' suggestion' + (s.suggestionCount !== 1 ? 's' : '') + ' generated';
         entry.appendChild(createElement('div', { className: 'timeline-detail', textContent: detail }));
+      }
+
+      if (s.clusters && s.clusters.length > 0) {
+        var counts = { create: 0, update: 0, skip: 0, error: 0 };
+        s.clusters.forEach(function(cl) { counts[cl.action] = (counts[cl.action] || 0) + 1; });
+        var parts = [];
+        if (counts.create) parts.push(counts.create + ' created');
+        if (counts.update) parts.push(counts.update + ' updated');
+        if (counts.skip) parts.push(counts.skip + ' skipped');
+        if (counts.error) parts.push(counts.error + ' errors');
+        var clusterDetail = s.clusters.length + ' clusters: ' + parts.join(', ');
+        entry.appendChild(createElement('div', { className: 'timeline-detail', textContent: clusterDetail }));
       }
 
       timeline.appendChild(entry);
