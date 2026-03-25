@@ -24969,7 +24969,7 @@ var state = {
   pendingSuggestions: [],
   startedAt: Date.now()
 };
-var pluginVersion = true ? "3.4.9" : "unknown";
+var pluginVersion = true ? "3.5.0" : "unknown";
 var claudeExecutablePath = null;
 function resolveClaudeExecutable() {
   try {
