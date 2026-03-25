@@ -41,6 +41,26 @@ export const SKIP_TOOLS = new Set([
 
 export const MAX_INPUT_LENGTH = 8000;
 
+export interface EvaluationOutput {
+  action: 'create' | 'update' | 'skip';
+  existingPath?: string;
+  title: string;
+  content: string;
+  tags: string[];
+  project: string;
+  branch: string;
+  confidence: number;
+  skipReason?: string;
+}
+
+export interface ClusterResult {
+  action: 'create' | 'update' | 'skip' | 'error';
+  title?: string;
+  path?: string;
+  error?: string;
+  confidence?: number;
+}
+
 export interface SessionRecord {
   startedAt: number;
   endedAt: number;
@@ -48,6 +68,7 @@ export interface SessionRecord {
   suggestionCount: number;
   suggestions: Array<{ title: string; confidence: number }>;
   error?: string;
+  clusters?: ClusterResult[];
 }
 
 export interface HookHeartbeat {
