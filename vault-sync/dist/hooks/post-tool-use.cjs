@@ -51,6 +51,7 @@ var import_fs = require("fs");
 var LORE_DIR = process.env.HOME ? `${process.env.HOME}/.lore` : "/tmp/.lore";
 var PID_FILE = `${LORE_DIR}/daemon.pid`;
 var SUGGESTIONS_FILE = `${LORE_DIR}/pending-suggestions.json`;
+var MAX_INPUT_LENGTH = 8e3;
 var HOOK_STATUS_FILE = `${LORE_DIR}/hook-status.json`;
 var SESSION_HISTORY_FILE = `${LORE_DIR}/session-history.json`;
 
@@ -90,6 +91,20 @@ var SKIP_TOOLS = /* @__PURE__ */ new Set([
   "Skill",
   "ToolSearch"
 ]);
+function extractFiles(toolName, toolInput) {
+  const files = [];
+  if (!toolInput) return files;
+  if (typeof toolInput === "object" && toolInput.file_path) {
+    files.push(toolInput.file_path);
+  }
+  if (toolName === "Bash" && typeof toolInput === "object" && toolInput.command) {
+    const pathMatches = toolInput.command.match(/(?:^|\s)(\/[\w./-]+\.\w+)/g);
+    if (pathMatches) {
+      files.push(...pathMatches.map((m) => m.trim()));
+    }
+  }
+  return [...new Set(files)];
+}
 function truncate(value, maxLen) {
   const str = typeof value === "string" ? value : JSON.stringify(value);
   return str.length > maxLen ? str.slice(0, maxLen) : str;
@@ -102,12 +117,14 @@ async function main() {
     if (!tool_name || SKIP_TOOLS.has(tool_name)) {
       return output({});
     }
+    const files = extractFiles(tool_name, tool_input);
     await daemonRequest("POST", "/observations", {
       tool_name,
-      tool_input: truncate(tool_input, 2e3),
-      tool_response: truncate(tool_response, 2e3),
+      tool_input: truncate(tool_input, MAX_INPUT_LENGTH),
+      tool_response: truncate(tool_response, MAX_INPUT_LENGTH),
       timestamp: Date.now(),
-      cwd
+      cwd,
+      files
     });
     output({});
   } catch (err) {

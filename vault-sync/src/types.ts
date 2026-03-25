@@ -4,6 +4,7 @@ export interface QueuedObservation {
   tool_response: string;
   timestamp: number;
   cwd?: string;
+  files?: string[];
 }
 
 export interface VaultSuggestion {
@@ -38,7 +39,7 @@ export const SKIP_TOOLS = new Set([
   'TaskCreate', 'TaskUpdate', 'TaskGet', 'TaskList',
 ]);
 
-export const MAX_INPUT_LENGTH = 2000;
+export const MAX_INPUT_LENGTH = 8000;
 
 export interface SessionRecord {
   startedAt: number;
