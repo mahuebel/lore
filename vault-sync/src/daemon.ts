@@ -17,8 +17,15 @@ import {
   type HookHeartbeat,
   HOOK_STATUS_FILE,
   SESSION_HISTORY_FILE,
+  type ClusterResult,
+  type EvaluationOutput,
 } from './types.js';
-import { evaluateObservations } from './evaluator.js';
+import { clusterObservations } from './clustering.js';
+import { evaluateClusters, type EvaluationResult } from './evaluator.js';
+import { createNote } from '../../vault-mcp/src/tools/vault-create-note.js';
+import { updateNote } from '../../vault-mcp/src/tools/vault-update-note.js';
+import { searchNotes } from '../../vault-mcp/src/vault/search.js';
+import { gitPull, gitPush } from '../../vault-mcp/src/git/sync.js';
 import { listVaultNotes, readVaultNote } from './vault-reader.js';
 import { resolveVaultForProject, normalizePath } from './vault-resolver.js';
 import { homedir } from 'node:os';
@@ -108,16 +115,29 @@ function resolveVaultFromQuery(c: any): string | null {
 
 const AUTO_PROMOTE_THRESHOLD = 0.75;
 
-function promoteToVault(suggestion: VaultSuggestion, vaultPath: string): string {
-  const slug = suggestion.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80);
-  const filename = `${slug}.md`;
-  const filePath = join(vaultPath, filename);
-  const now = new Date().toISOString().split('T')[0];
-  const tagsYaml = suggestion.tags.length > 0 ? `tags: [${suggestion.tags.join(', ')}]` : 'tags: []';
-  const noteContent = `---\ntitle: "${suggestion.title}"\nstatus: exploratory\n${tagsYaml}\nbranch: main\ncreated: ${now}\n---\n\n${suggestion.content}\n`;
-  mkdirSync(vaultPath, { recursive: true });
-  writeFileSync(filePath, noteContent);
-  return filename;
+function makeVaultSearcher(vaultPath: string): (query: string) => Promise<string[]> {
+  return async (query: string): Promise<string[]> => {
+    try {
+      const results = searchNotes(vaultPath, query, 10);
+      return results.map(r => {
+        const content = readFileSync(join(vaultPath, r.path), 'utf-8').slice(0, 2000);
+        return `[${r.path}] ${r.title}\n${content}`;
+      });
+    } catch {
+      return [];
+    }
+  };
+}
+
+function resolveAuthor(cwd: string): string {
+  try {
+    const configPath = join(cwd, '.lore', 'config.json');
+    if (existsSync(configPath)) {
+      const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+      if (config.author) return config.author;
+    }
+  } catch {}
+  return 'vault-sync';
 }
 
 function evaluateInBackground(observations: QueuedObservation[]) {
@@ -146,63 +166,189 @@ function evaluateInBackground(observations: QueuedObservation[]) {
     return;
   }
 
-  evaluateObservations(observations, claudeExecutablePath)
-    .then((result) => {
-      const { suggestions, error } = result;
+  // Derive metadata
+  let branch = 'unknown';
+  try {
+    branch = execFileSync('git', ['branch', '--show-current'], { cwd: primaryCwd, encoding: 'utf-8', timeout: 5000 }).trim() || 'unknown';
+  } catch {}
 
-      if (error) {
-        evalStatus.state = 'error';
-        evalStatus.lastError = error;
-      } else {
-        evalStatus.state = 'idle';
+  let project = primaryCwd.split('/').pop() || 'unknown';
+  try {
+    const configPath = join(primaryCwd, '.lore', 'config.json');
+    if (existsSync(configPath)) {
+      const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+      if (config.project) project = config.project;
+    }
+  } catch {}
+
+  const author = resolveAuthor(primaryCwd);
+  const metadata = { branch, project, cwd: primaryCwd };
+  const searchVault = makeVaultSearcher(vaultPath);
+
+  // Phase 1: Cluster observations
+  const clusters = clusterObservations(observations);
+  console.error(`[vault-sync] clustered ${observations.length} observations into ${clusters.length} clusters`);
+
+  if (clusters.length === 0) {
+    evalStatus.state = 'idle';
+    evalStatus.completedAt = Date.now();
+    evalStatus.lastSuggestionCount = 0;
+    console.error(`[vault-sync] no clusters to evaluate`);
+    const record: SessionRecord = {
+      startedAt: state.startedAt,
+      endedAt: Date.now(),
+      observationCount: observations.length,
+      suggestionCount: 0,
+      suggestions: [],
+    };
+    writeSessionHistory(record);
+    return;
+  }
+
+  // Phase 2 & 3: Evaluate clusters and write to vault
+  (async () => {
+    try {
+      // Git pull once before any writes
+      try {
+        const pullResult = await gitPull(vaultPath);
+        if (pullResult.error) {
+          console.error(`[vault-sync] git pull warning: ${pullResult.error}`);
+        }
+      } catch (pullErr) {
+        console.error(`[vault-sync] git pull failed (continuing): ${pullErr}`);
       }
+
+      // Phase 2: Evaluate clusters
+      const evalResult: EvaluationResult = await evaluateClusters(clusters, claudeExecutablePath!, searchVault, metadata);
+
+      const clusterResults: ClusterResult[] = [];
+      const pending: VaultSuggestion[] = [];
+      let promotedCount = 0;
+
+      // Phase 3: Process results
+      for (const r of evalResult.results) {
+        if (r.error || !r.output) {
+          clusterResults.push({ action: 'error', error: r.error || 'no output' });
+          continue;
+        }
+
+        const output: EvaluationOutput = r.output;
+
+        if (output.action === 'skip') {
+          console.error(`[vault-sync] skipped: ${output.skipReason || 'no reason'}`);
+          clusterResults.push({ action: 'skip', title: output.title, confidence: output.confidence });
+          continue;
+        }
+
+        if (output.confidence >= AUTO_PROMOTE_THRESHOLD) {
+          if (output.action === 'create') {
+            let created = false;
+            let finalTitle = output.title;
+            for (let attempt = 0; attempt < 5; attempt++) {
+              try {
+                const noteTitle = attempt === 0 ? output.title : `${output.title} (${attempt + 1})`;
+                const result = createNote(vaultPath, author, {
+                  title: noteTitle,
+                  content: output.content,
+                  tags: output.tags,
+                  project: output.project,
+                  branch: output.branch,
+                });
+                finalTitle = noteTitle;
+                promotedCount++;
+                console.error(`[vault-sync] created note (${output.confidence}): ${result.path}`);
+                clusterResults.push({ action: 'create', title: finalTitle, path: result.path, confidence: output.confidence });
+                created = true;
+                break;
+              } catch (err) {
+                const errMsg = String(err);
+                if (errMsg.includes('already exists') && attempt < 4) {
+                  continue;
+                }
+                // Fall to pending on other errors or exhausted retries
+                console.error(`[vault-sync] create failed, falling to pending: ${err}`);
+                break;
+              }
+            }
+            if (!created) {
+              pending.push({
+                title: output.title,
+                content: output.content,
+                tags: output.tags,
+                confidence: output.confidence,
+                evaluatedAt: Date.now(),
+              });
+              clusterResults.push({ action: 'create', title: output.title, confidence: output.confidence, error: 'fell to pending' });
+            }
+          } else if (output.action === 'update' && output.existingPath) {
+            try {
+              updateNote(vaultPath, { path: output.existingPath, content: output.content });
+              promotedCount++;
+              console.error(`[vault-sync] updated note (${output.confidence}): ${output.existingPath}`);
+              clusterResults.push({ action: 'update', title: output.title, path: output.existingPath, confidence: output.confidence });
+            } catch (err) {
+              console.error(`[vault-sync] update failed, falling to pending: ${err}`);
+              pending.push({
+                title: output.title,
+                content: output.content,
+                tags: output.tags,
+                confidence: output.confidence,
+                evaluatedAt: Date.now(),
+              });
+              clusterResults.push({ action: 'update', title: output.title, confidence: output.confidence, error: 'fell to pending' });
+            }
+          }
+        } else {
+          // Below threshold — store as pending
+          pending.push({
+            title: output.title,
+            content: output.content,
+            tags: output.tags,
+            confidence: output.confidence,
+            evaluatedAt: Date.now(),
+          });
+          clusterResults.push({ action: output.action, title: output.title, confidence: output.confidence });
+        }
+      }
+
+      // Store pending suggestions
+      if (pending.length > 0) {
+        const existing = readSuggestionsFile();
+        const vaultSuggestions = existing[vaultPath] || [];
+        existing[vaultPath] = [...vaultSuggestions, ...pending];
+        writeSuggestionsFile(existing);
+      }
+
+      // Git push once after all writes
+      if (promotedCount > 0) {
+        try {
+          const pushResult = await gitPush(vaultPath, author, `vault-sync: ${promotedCount} notes from session`);
+          if (pushResult.warning) {
+            console.error(`[vault-sync] git push warning: ${pushResult.warning}`);
+          }
+        } catch (pushErr) {
+          console.error(`[vault-sync] git push failed: ${pushErr}`);
+        }
+      }
+
+      evalStatus.state = 'idle';
       evalStatus.completedAt = Date.now();
-      evalStatus.lastSuggestionCount = suggestions.length;
+      evalStatus.lastSuggestionCount = promotedCount + pending.length;
+
+      console.error(`[vault-sync] ${promotedCount} auto-promoted, ${pending.length} pending for ${vaultPath}`);
 
       const record: SessionRecord = {
         startedAt: state.startedAt,
         endedAt: Date.now(),
         observationCount: observations.length,
-        suggestionCount: suggestions.length,
-        suggestions: suggestions.map(s => ({ title: s.title, confidence: s.confidence })),
-        ...(error ? { error } : {}),
+        suggestionCount: promotedCount + pending.length,
+        suggestions: clusterResults
+          .filter(cr => cr.title && cr.confidence != null)
+          .map(cr => ({ title: cr.title!, confidence: cr.confidence! })),
+        clusters: clusterResults,
       };
       writeSessionHistory(record);
-
-      if (suggestions.length > 0) {
-        const autoPromoted: VaultSuggestion[] = [];
-        const pending: VaultSuggestion[] = [];
-
-        for (const s of suggestions) {
-          if (s.confidence >= AUTO_PROMOTE_THRESHOLD) {
-            try {
-              const file = promoteToVault(s, vaultPath);
-              autoPromoted.push(s);
-              console.error(`[vault-sync] auto-promoted (${s.confidence}): ${file}`);
-            } catch (err) {
-              console.error(`[vault-sync] auto-promote failed: ${err}`);
-              pending.push(s);
-            }
-          } else {
-            pending.push(s);
-          }
-        }
-
-        if (pending.length > 0) {
-          const existing = readSuggestionsFile();
-          const vaultSuggestions = existing[vaultPath] || [];
-          existing[vaultPath] = [...vaultSuggestions, ...pending];
-          writeSuggestionsFile(existing);
-        }
-
-        console.error(`[vault-sync] ${autoPromoted.length} auto-promoted, ${pending.length} pending for ${vaultPath}`);
-      } else if (error) {
-        console.error(`[vault-sync] evaluation failed: ${error}`);
-      } else {
-        console.error(`[vault-sync] no vault-worthy observations found`);
-      }
-    })
-    .catch((err) => {
+    } catch (err) {
       evalStatus.state = 'error';
       evalStatus.completedAt = Date.now();
       evalStatus.lastError = String(err);
@@ -217,7 +363,8 @@ function evaluateInBackground(observations: QueuedObservation[]) {
         error: String(err),
       };
       writeSessionHistory(record);
-    });
+    }
+  })();
 }
 
 function writeSessionHistory(record: SessionRecord) {
@@ -307,6 +454,14 @@ app.post('/suggestions', async (c) => {
 
 app.post('/evaluate', async (c) => {
   try {
+    // Concurrency guard: if already evaluating, queue new observations
+    if (evalStatus.state === 'evaluating') {
+      const body = await c.req.json().catch(() => null);
+      const newObs: QueuedObservation[] = body?.observations || [];
+      state.observations.push(...newObs);
+      return c.json({ queued: true, reason: 'evaluation in progress', depth: state.observations.length });
+    }
+
     const body = await c.req.json().catch(() => null);
     const observations: QueuedObservation[] = body?.observations || [];
 
@@ -396,12 +551,19 @@ app.post('/suggestions/promote/:index', async (c) => {
     if (index < 0 || index >= suggestions.length) return c.json({ error: 'Index out of range' }, 404);
 
     const suggestion = suggestions[index];
-    const filename = promoteToVault(suggestion, key);
+    const author = resolveAuthor(process.cwd());
+    const noteResult = createNote(key, author, {
+      title: suggestion.title,
+      content: suggestion.content,
+      tags: suggestion.tags,
+      project: 'unknown',
+      branch: 'main',
+    });
 
     suggestions.splice(index, 1);
     if (suggestions.length === 0) delete all[key];
     writeSuggestionsFile(all);
-    return c.json({ promoted: true, path: filename, vault: vaultPath, remaining: suggestions.length });
+    return c.json({ promoted: true, path: noteResult.path, vault: key, remaining: suggestions.length });
   } catch {
     return c.json({ error: 'Failed to promote suggestion' }, 500);
   }
